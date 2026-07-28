@@ -5,7 +5,9 @@
 
 var NakamaClient = (function () {
 
-    var SERVER_HOST = "care-resistance-yields-jewel.trycloudflare.com";
+    // Permanent Tailscale Funnel hostname. Does not change across restarts or
+    // reboots, so it never needs the old update-tunnel-url.sh rewrite-and-push.
+    var SERVER_HOST = "ubuntu-3.tail2344fc.ts.net";
     var SERVER_PORT = "443";
     var SERVER_KEY  = "1eebcf80e66915369084f9fa";
     var USE_SSL     = true;
