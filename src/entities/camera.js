@@ -519,6 +519,7 @@ function UpdateCamera(){
                 distance: 0,
                 image: textures.bullet,
                 damage: currentWeapon.damage,
+                weaponType: currentSlot.type,   // server looks damage up by this
                 hitscanHit: null, stopDistance: null,
                 homing: !!homingTarget,
                 homingTarget: homingTarget,
@@ -595,6 +596,7 @@ function UpdateCamera(){
                 distance: 0,
                 image: textures.bullet,
                 damage: currentWeapon.damage,
+                weaponType: currentSlot.type,   // server looks damage up by this
                 hitscanHit: hitscanHitPos,
                 stopDistance: hitscanHitPos ? hitscanHitPos.dist : null
             };
@@ -735,7 +737,7 @@ function UpdateCamera(){
                     var rpMidZ = rp.height - playerHeightOffset * (10 / 70); // ~14% below eye level
                     var rpdx = it.x - rp.x, rpdy = it.y - rp.y, rpdz = it.z - rpMidZ;
                     if (Math.sqrt(rpdx*rpdx + rpdy*rpdy + rpdz*rpdz) < rpHitRadius) {
-                        Multiplayer.reportHit(rp.userId, it.damage || 10);
+                        Multiplayer.reportHit(rp.userId, it.weaponType);
                         if (it === lastBullet) { lastBullet = null; }
                         return false; // destroy bullet
                     }

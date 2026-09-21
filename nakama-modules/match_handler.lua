@@ -25,7 +25,49 @@ local SHOUT_RANGE    = 500
 local MAX_HEALTH     = 100
 local RESPAWN_TICKS  = 5 * TICK_RATE  -- 5 seconds until respawn
 
+-- Shields are server-authoritative. They used to live only in the browser,
+-- which forced the client to report its own health back in every position
+-- update so the server could see shield absorption -- that echo was the
+-- "client decides its own health" hole. The server now owns both pools.
+-- Values mirror src/core/globals.js so the client's display prediction agrees.
+local SHIELD_MAX            = 100
+local SHIELD_REGEN_PER_SEC  = 5
+local SHIELD_REGEN_DELAY_MS = 4000
+
+-- Server-authoritative weapon table. Mirrors the `weapons` object in
+-- src/core/globals.js. The client sends only a weapon TYPE; damage is
+-- looked up here so a tampered client cannot inflate it.
+--   damage       : HP per projectile that connects
+--   interval_ms  : minimum time between trigger pulls (fireRate; charge
+--                  weapons use chargeTime)
+--   max_per_shot : projectiles one trigger pull may report -- the shotgun
+--                  legitimately reports 6 pellets from a single shot
+local WEAPONS = {
+    testgun      = { damage = 50,  interval_ms = 100,  max_per_shot = 1 },
+    rifle        = { damage = 15,  interval_ms = 100,  max_per_shot = 1 },
+    pistol       = { damage = 25,  interval_ms = 200,  max_per_shot = 1 },
+    sniper       = { damage = 100, interval_ms = 1000, max_per_shot = 1 },
+    shotgun      = { damage = 12,  interval_ms = 700,  max_per_shot = 6 },
+    tracer       = { damage = 30,  interval_ms = 1500, max_per_shot = 1 },
+    plasmaRifle  = { damage = 5,   interval_ms = 80,   max_per_shot = 1 },
+    plasmaPistol = { damage = 12,  interval_ms = 400,  max_per_shot = 1 },
+}
+
+-- Bursts can arrive slightly early under jitter, so the window is a little
+-- shorter than the weapon's nominal interval.
+local FIRE_RATE_GRACE = 0.8
+-- Ceiling on accepted hits per player per second across ALL weapons. Stops a
+-- client cycling weapon types to get a fresh window per type.
+local MAX_HITS_PER_SEC = 20
+
 local M = {}
+
+-- Milliseconds. Falls back to tick-derived time if nk.time() is unavailable.
+local function now_ms(tick)
+    local ok, t = pcall(_nk.time)
+    if ok and type(t) == "number" then return t end
+    return math.floor(tick * (1000 / TICK_RATE))
+end
 
 local function dist2d(x1, y1, x2, y2)
     local dx = x1 - x2
@@ -72,9 +114,12 @@ function M.match_join(context, dispatcher, tick, state, presences)
             state.presences[uid] = presence
             state.players[uid]   = {
                 x = sx, y = sy, height = 78, angle = 0, health = MAX_HEALTH,
+                shield = SHIELD_MAX, lastDamageMs = 0,
                 kills = 0,
                 username = presence.username, clan = clan,
-                lastX = sx, lastY = sy
+                lastX = sx, lastY = sy,
+                -- fire-rate bookkeeping, see OP_HIT
+                fireWindows = {}, hitsThisSec = 0, hitSecStart = 0
             }
 
             -- Send current player list to new joiner
@@ -147,7 +192,9 @@ local function handle_message(dispatcher, state, tick, msg)
         record.y      = data.y      or record.y
         record.height = data.height or record.height
         record.angle  = data.angle  or record.angle
-        record.health = math.max(0, math.min(MAX_HEALTH, data.health or record.health))
+        -- record.health is deliberately NOT read from the client. Health
+        -- changes only via OP_HIT. A client that reports health = 100 every
+        -- frame used to be unkillable.
 
         local others = {}
         for uid, p in pairs(state.presences) do
@@ -193,10 +240,16 @@ local function handle_message(dispatcher, state, tick, msg)
 
     elseif op == OP_HIT then
         local target_id = data.targetId
-        local damage    = math.max(0, math.min(100, tonumber(data.damage) or 0))
         local target    = state.players[target_id]
         if not target then return end
         if target.isDead then return end  -- already dead, waiting for respawn
+
+        -- Damage is decided HERE. The client sends a weapon type, never a
+        -- number; an unknown or absent type is rejected outright.
+        local wname = tostring(data.weaponType or "")
+        local spec  = WEAPONS[wname]
+        if not spec then return end
+
         if dist2d(record.x, record.y, target.x, target.y) > 1000 then return end
 
         -- Friendly fire check
@@ -213,12 +266,44 @@ local function handle_message(dispatcher, state, tick, msg)
             return
         end
 
+        -- Fire-rate throttle. Without this the server accepted every OP_HIT
+        -- it received, so a client could drain anyone by spamming hits.
+        -- Each weapon may land at most max_per_shot projectiles per interval.
+        local now = now_ms(tick)
+
+        record.hitSecStart = record.hitSecStart or 0
+        record.hitsThisSec = record.hitsThisSec or 0
+        if (now - record.hitSecStart) >= 1000 then
+            record.hitSecStart = now
+            record.hitsThisSec = 0
+        end
+        if record.hitsThisSec >= MAX_HITS_PER_SEC then return end
+
+        record.fireWindows = record.fireWindows or {}
+        local window = record.fireWindows[wname]
+        local span   = spec.interval_ms * FIRE_RATE_GRACE
+        if (not window) or (now - window.start) >= span then
+            window = { start = now, count = 0 }
+            record.fireWindows[wname] = window
+        end
+        if window.count >= spec.max_per_shot then return end
+        window.count       = window.count + 1
+        record.hitsThisSec = record.hitsThisSec + 1
+
+        -- Shield absorbs first, then health. Both pools live here now.
+        local damage      = spec.damage
         local prev_health = target.health
-        target.health = math.max(0, target.health - damage)
+        target.shield = target.shield or SHIELD_MAX
+        local absorbed = math.min(target.shield, damage)
+        target.shield  = target.shield - absorbed
+        target.health  = math.max(0, target.health - (damage - absorbed))
+        target.lastDamageMs = now
+
         local tp = state.presences[target_id]
         if tp then
             dispatcher.broadcast_message(OP_DAMAGE,
-                _nk.json_encode({ shooterId = sender_uid, damage = damage, health = target.health }),
+                _nk.json_encode({ shooterId = sender_uid, damage = damage,
+                    health = target.health, shield = target.shield }),
                 { tp }, nil, true)
         end
         if prev_health > 0 and target.health <= 0 then
@@ -262,6 +347,20 @@ function M.match_loop(context, dispatcher, tick, state, messages)
         end
     end
 
+    -- Shield regeneration. Mirrors the client's display prediction in
+    -- camera.js (5/sec, starting 4s after the last damage taken).
+    local tnow = now_ms(tick)
+    for _, p in pairs(state.players) do
+        if not p.isDead and (p.health or 0) > 0 then
+            p.shield = p.shield or SHIELD_MAX
+            if p.shield < SHIELD_MAX
+               and (tnow - (p.lastDamageMs or 0)) >= SHIELD_REGEN_DELAY_MS then
+                p.shield = math.min(SHIELD_MAX,
+                                    p.shield + SHIELD_REGEN_PER_SEC / TICK_RATE)
+            end
+        end
+    end
+
     -- Respawn dead players after RESPAWN_TICKS
     for uid, p in pairs(state.players) do
         if p.isDead and p.deathTick and (tick - p.deathTick) >= RESPAWN_TICKS then
@@ -270,6 +369,8 @@ function M.match_loop(context, dispatcher, tick, state, messages)
             p.x      = rx
             p.y      = ry
             p.health = MAX_HEALTH
+            p.shield = SHIELD_MAX
+            p.lastDamageMs = 0
             p.isDead = false
             dispatcher.broadcast_message(OP_PLAYER_JOIN,
                 _nk.json_encode({ userId = uid, username = p.username,

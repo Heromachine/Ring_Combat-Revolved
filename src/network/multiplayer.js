@@ -133,7 +133,8 @@ var Multiplayer = (function () {
             y:      camera.y,
             height: camera.height,
             angle:  camera.angle,
-            health: player.health,
+            // health is NOT sent. The server owns it; reporting our own
+            // health here is what used to make a tampered client unkillable.
             ping:   nakamaState.myPing
         });
     }
@@ -160,11 +161,15 @@ var Multiplayer = (function () {
 
     // ── Report a hit on a remote player ──────────────────────
 
-    function reportHit(targetUserId, damage) {
+    // Reports WHICH WEAPON hit, never how much damage it did. The server
+    // looks the damage up in its own table, so editing weapons in the
+    // console no longer changes what a shot is worth.
+    function reportHit(targetUserId, weaponType) {
         if (!_connected || !_matchId) return;
+        if (!weaponType) return;
         NakamaClient.sendMatchData(_matchId, OP_HIT, {
-            targetId: targetUserId,
-            damage:   damage
+            targetId:   targetUserId,
+            weaponType: weaponType
         });
     }
 
@@ -324,18 +329,14 @@ var Multiplayer = (function () {
             disconnect();
 
         } else if (opCode === OP_DAMAGE) {
-            // Server confirmed we took damage — shield absorbs first
-            var newHealth = Math.max(0, data.health);
-            var dmg = Math.max(0, player.health - newHealth);
-            if (dmg > 0) {
-                var absorbed = Math.min(player.shield, dmg);
-                player.shield = Math.max(0, player.shield - absorbed);
-                var remainder = dmg - absorbed;
-                player.health = Math.max(0, player.health - remainder);
-                player.lastDamageTime = Date.now();
-            } else {
-                player.health = newHealth; // healing or no change
+            // The server applies shield-then-health and sends both pools.
+            // We just adopt them — no local absorption maths, because that
+            // is what used to be echoed back as authoritative health.
+            player.health = Math.max(0, data.health);
+            if (typeof data.shield === "number") {
+                player.shield = Math.max(0, data.shield);
             }
+            player.lastDamageTime = Date.now();
             if (player.health <= 0) showDeathScreen();
 
         } else if (opCode === OP_RADAR_REVEAL) {
