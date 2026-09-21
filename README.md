@@ -265,7 +265,7 @@ Ring_Combat-Revolved/
 ├── index.html                       # Main game entry point
 ├── nakama-modules/                  # Server-side Lua (deploy to Nakama)
 │   ├── match_handler.lua            # Open world match logic
-│   └── find_or_create_match.lua     # RPC to join/create the world match
+│   └── find_or_create_match.lua     # RPC rcr_find_or_create_match — join/create the world match
 ├── data/                            # JSON config files
 │   ├── settings.json
 │   ├── gunModel.json

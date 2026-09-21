@@ -101,7 +101,7 @@ var NakamaClient = (function () {
 
     async function joinOrCreateMatch() {
         if (!_socket) throw new Error("Socket not connected");
-        var result = await _socket.rpc("find_or_create_match", "{}");
+        var result = await _socket.rpc("rcr_find_or_create_match", "{}");
         var data = JSON.parse(result.payload);
         var match = await _socket.joinMatch(data.match_id);
         return match;
