@@ -1,4 +1,4 @@
-# VoxelSpace Development Notes
+# Ring — Combat Revolved Development Notes
 
 ## JSON Config System (2026-02-04)
 
@@ -9,7 +9,7 @@ Settings are now stored in JSON files in the `data/` folder, following the patte
 ### File Structure
 
 ```
-VoxelSpace-master/
+Ring_Combat-Revolved/
 ├── data/                    # JSON config files (pure data)
 │   ├── settings.json        # Camera, player, bullet, UI settings
 │   ├── gunModel.json        # Gun positioning (ADS/Hip fire)

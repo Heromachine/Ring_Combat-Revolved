@@ -458,7 +458,7 @@ function setupSliders() {
     document.getElementById('saveSettings').addEventListener('click', async function() {
         var btn = this;
         savedSettings = getAllSettings();
-        localStorage.setItem('voxelSpaceSettings', JSON.stringify(savedSettings));
+        localStorage.setItem('ringCombatSettings', JSON.stringify(savedSettings));
 
         // Push to Nakama for cross-device persistence
         if (NakamaClient.isLoggedIn()) {
@@ -816,7 +816,7 @@ async function loadSettings() {
 
     if (isAdmin) {
         // 1. Try localStorage first (fastest, same machine)
-        var stored = localStorage.getItem('voxelSpaceSettings');
+        var stored = localStorage.getItem('ringCombatSettings');
         if (stored) {
             try {
                 savedSettings = JSON.parse(stored);
@@ -837,7 +837,7 @@ async function loadSettings() {
                 if (nakamaSettings) {
                     savedSettings = nakamaSettings;
                     // Also cache locally so next load is instant
-                    localStorage.setItem('voxelSpaceSettings', JSON.stringify(savedSettings));
+                    localStorage.setItem('ringCombatSettings', JSON.stringify(savedSettings));
                     console.log('Loading saved settings from Nakama admin storage');
                     applySettings(savedSettings);
                     if (jsonLoaded) { ConfigLoader.applyWeapons(); ConfigLoader.applyGamepad(); }
@@ -866,7 +866,7 @@ async function loadSettings() {
 
 // Debug functions
 window.clearVoxelSettings = function() {
-    localStorage.removeItem('voxelSpaceSettings');
+    localStorage.removeItem('ringCombatSettings');
     console.log('Saved settings cleared. Refresh to use defaults from JSON.');
 };
 

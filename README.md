@@ -1,4 +1,4 @@
-# VoxelSpace — Open World FPS Survival
+# Ring — Combat Revolved
 
 A browser-based open-world first-person survival shooter built on the [VoxelSpace](https://github.com/s-macke/VoxelSpace) terrain rendering engine — the same technique used in NovaLogic's *Comanche* (1992). No NPCs. Pure player-vs-player survival.
 
@@ -170,7 +170,7 @@ docker compose up -d
 
 ```bash
 # Copy Lua modules to the Nakama data directory
-cp /path/to/VoxelSpace/nakama-modules/*.lua ~/nakama/data/modules/
+cp /path/to/Ring_Combat-Revolved/nakama-modules/*.lua ~/nakama/data/modules/
 
 # Restart Nakama to load the new modules
 docker compose restart nakama
@@ -260,7 +260,7 @@ Update the service `ExecStart` to use the named tunnel config and set `SERVER_HO
 ## Project Structure
 
 ```
-VoxelSpace/
+Ring_Combat-Revolved/
 ├── README.md
 ├── index.html                       # Main game entry point
 ├── nakama-modules/                  # Server-side Lua (deploy to Nakama)

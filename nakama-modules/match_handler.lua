@@ -1,5 +1,5 @@
 -- ============================================================
--- VoxelSpace Open World Match Handler
+-- Ring — Combat Revolved: Open World Match Handler
 -- Nakama Lua server-side module
 -- ============================================================
 

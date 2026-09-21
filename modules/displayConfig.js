@@ -250,7 +250,7 @@ DisplayConfig.getCanvasDimensions = function(containerWidth, containerHeight) {
  */
 DisplayConfig.save = function() {
     try {
-        localStorage.setItem('voxelspace_display_config', JSON.stringify({
+        localStorage.setItem('ringcombat_display_config', JSON.stringify({
             resolution: this.resolution,
             display: this.display,
             graphics: this.graphics,
@@ -271,7 +271,7 @@ DisplayConfig.save = function() {
  */
 DisplayConfig.load = function() {
     try {
-        var saved = localStorage.getItem('voxelspace_display_config');
+        var saved = localStorage.getItem('ringcombat_display_config');
         if (saved) {
             var config = JSON.parse(saved);
             // Merge saved config with defaults (to handle new settings)
@@ -292,7 +292,7 @@ DisplayConfig.load = function() {
  * Reset to defaults
  */
 DisplayConfig.resetToDefaults = function() {
-    localStorage.removeItem('voxelspace_display_config');
+    localStorage.removeItem('ringcombat_display_config');
     location.reload();
 };
 

@@ -40,7 +40,7 @@ var NakamaClient = (function () {
     async function loginUsername(username, password) {
         var client = getClient();
         _session = await client.authenticateEmail(
-            username + "@voxelspace.game",  // Nakama email auth needs email format
+            username + "@ringcombat.game",  // Nakama email auth needs email format
             password,
             true,    // create if not exists
             username
