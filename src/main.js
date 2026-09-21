@@ -269,7 +269,11 @@ function Init(){
     window.onkeydown=DetectKeysDown;
     window.onkeyup=DetectKeysUp;
     canvas.onmousedown=DetectMouseDown;
-    canvas.onmouseup=DetectMouseUp;
+    // mouseup is bound to the WINDOW, not the canvas. Bound to the canvas it
+    // was missed whenever the release happened over something else -- opening
+    // the Tab menu put an overlay under the cursor, so the release never
+    // reached the canvas and input.shoot stayed true.
+    window.addEventListener('mouseup', DetectMouseUp);
     canvas.onwheel=DetectMouseWheel;
     canvas.oncontextmenu=function(e){e.preventDefault();return false;};
     window.onresize=OnResizeWindow;
@@ -281,8 +285,14 @@ function Init(){
             canvas.onmousemove=DetectMouseMove;
         } else {
             canvas.onmousemove=null;
+            // Lock lost (menu, Esc, alt-tab). Release events may never arrive,
+            // so drop everything held rather than leaving it stuck down.
+            releaseHeldInput();
         }
     },false);
+
+    // Focus loss is the other way release events go missing.
+    window.addEventListener('blur', releaseHeldInput);
 
     // Mobile touch controls setup — listen on game canvas
     canvas.addEventListener('touchstart', handleTouchStart, { passive: false });

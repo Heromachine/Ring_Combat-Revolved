@@ -34,6 +34,11 @@ var InGameMenu = (function () {
         var el = document.getElementById('ingame-menu');
         if (el) el.classList.add('open');
         if (document.pointerLockElement) document.exitPointerLock();
+        // The overlay swallows the mouseup, so anything held when the menu
+        // opened would stay held. Release it here too -- exitPointerLock
+        // covers the usual path, but not the case where the lock was
+        // already gone.
+        if (typeof releaseHeldInput === "function") releaseHeldInput();
     }
 
     function hide() {

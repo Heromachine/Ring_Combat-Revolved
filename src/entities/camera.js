@@ -416,6 +416,12 @@ function UpdateCamera(){
     if(currentWeapon.fireMode === "semi" && player.wasShooting){
         canShoot = false;
     }
+    // Never fire while the in-game menu is open. This is the backstop: even
+    // if a held input leaks past releaseHeldInput(), the gun stays silent
+    // while the player is in the menu.
+    if(typeof InGameMenu !== "undefined" && InGameMenu.isOpen()){
+        canShoot = false;
+    }
     player.wasShooting = isShooting;
 
     // Helper: compute aim direction for current ADS/hip state
@@ -483,7 +489,10 @@ function UpdateCamera(){
     }
 
     // --- Charge weapon (Tracer): fires on trigger RELEASE ---
-    if (currentWeapon.fireMode === 'charge') {
+    // Gated on canShoot as well, because this path fires on RELEASE rather
+    // than on press: without the guard, opening the menu mid-charge could
+    // still loose a shot.
+    if (currentWeapon.fireMode === 'charge' && canShoot) {
         if (isShooting && !wasShootingBefore && !currentSlot.isReloading && currentSlot.ammo > 0) {
             currentSlot.chargeStartTime = current;  // just pressed — begin charging
         }
