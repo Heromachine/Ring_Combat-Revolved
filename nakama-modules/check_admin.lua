@@ -37,4 +37,6 @@ local function check_admin(context, payload)
     return nk.json_encode({ isAdmin = is_admin })
 end
 
-nk.register_rpc(check_admin, "check_admin")
+-- Namespaced (rcr_ = Ring Combat Revolved): rpc ids are a single flat
+-- namespace on this shared Nakama instance. See find_or_create_match.lua.
+nk.register_rpc(check_admin, "rcr_check_admin")

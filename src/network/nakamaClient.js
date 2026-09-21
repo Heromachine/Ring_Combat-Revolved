@@ -109,7 +109,7 @@ var NakamaClient = (function () {
 
     async function joinOrCreateNodeWarMatch() {
         if (!_socket) throw new Error("Socket not connected");
-        var result = await _socket.rpc("find_or_create_nw_match", "{}");
+        var result = await _socket.rpc("rcr_find_or_create_nw_match", "{}");
         var data = JSON.parse(result.payload);
         var match = await _socket.joinMatch(data.matchId);
         return match;
@@ -200,7 +200,7 @@ var NakamaClient = (function () {
     async function checkAdmin() {
         if (!_session) return false;
         try {
-            var result = await getClient().rpc(_session, "check_admin", {});
+            var result = await getClient().rpc(_session, "rcr_check_admin", {});
             var payload = result && result.payload;
             if (typeof payload === "string") payload = JSON.parse(payload);
             return !!(payload && payload.isAdmin === true);
