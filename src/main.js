@@ -348,8 +348,10 @@ async function beginGame(isAnonymous) {
         console.warn("Multiplayer failed to connect, running offline:", e);
     }
 
-    // Admin check — developer UI only visible to heromachine
-    isAdmin = (NakamaClient.getUsername() === "heromachine");
+    // Admin check — decided by the SERVER, never by the client.
+    // The check_admin RPC pins admin to an immutable Nakama user_id.
+    // Fails closed to non-admin if the RPC or session is unavailable.
+    isAdmin = await NakamaClient.checkAdmin();
     if (isAdmin) {
         DisplayConfig.load(); // restore admin's saved display settings
     } else {
@@ -388,7 +390,7 @@ async function beginNodeWarGame(isAnonymous) {
     } catch (e) {
         console.warn("Node War: multiplayer failed, running offline:", e);
     }
-    isAdmin = (NakamaClient.getUsername() === "heromachine");
+    isAdmin = await NakamaClient.checkAdmin();
     if (isAdmin) {
         DisplayConfig.load();
     } else {
@@ -401,8 +403,8 @@ async function beginNodeWarGame(isAnonymous) {
 }
 
 async function beginAdminGame() {
-    // Grant admin tools if heromachine; others get read-only dev access
-    isAdmin = (NakamaClient.getUsername() === "heromachine");
+    // Grant admin tools only if the server says so; others get read-only dev access
+    isAdmin = await NakamaClient.checkAdmin();
     if (isAdmin) {
         DisplayConfig.load();
     } else {

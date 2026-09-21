@@ -189,6 +189,27 @@ var NakamaClient = (function () {
         }
     }
 
+    // ── Admin status (server-authoritative) ─────────────────
+
+    // Asks the server whether THIS session is an admin. The client
+    // must never decide this itself. Uses the HTTP client rather than
+    // the socket so it still works when the match socket is down
+    // (offline / failed Multiplayer.init).
+    //
+    // Fails closed: any error, no session, or a malformed reply -> false.
+    async function checkAdmin() {
+        if (!_session) return false;
+        try {
+            var result = await getClient().rpc(_session, "check_admin", {});
+            var payload = result && result.payload;
+            if (typeof payload === "string") payload = JSON.parse(payload);
+            return !!(payload && payload.isAdmin === true);
+        } catch (e) {
+            console.warn("check_admin RPC failed, defaulting to non-admin:", e);
+            return false;
+        }
+    }
+
     // ── Disconnect ───────────────────────────────────────────
 
     function disconnect() {
@@ -215,6 +236,7 @@ var NakamaClient = (function () {
         writePlayerData:   writePlayerData,
         readAdminSettings: readAdminSettings,
         writeAdminSettings: writeAdminSettings,
+        checkAdmin:        checkAdmin,
         disconnect:        disconnect
     };
 
