@@ -232,7 +232,12 @@ function Init(){
     // AUTHORING: flat default fill before the real map loads.
     var _m=Terrain.rawMap();
     for(var i=0;i<_m.width*_m.height;i++){_m.color[i]=0xFF007050;_m.altitude[i]=0;}
-    LoadMap("CE;DE");
+    // C21;D21 has the most terrain variation of the available pairs
+    // (height std 33.5 over range 1-125, 228 distinct colours). The old
+    // default CE;DE is a featureless light-grey arena -- its entire palette
+    // is rgb(193,193,192) -- which made the ring impossible to judge and
+    // read on screen as "everything is white". Press M to cycle maps.
+    LoadMap("C21;D21");
     OnResizeWindow();
     loadGunModel();
     loadCubeTexture();

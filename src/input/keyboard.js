@@ -6,7 +6,11 @@
 // PHASE 1 SPIKE: map pairs with real terrain, for judging the ring.
 // Format is "colour;height". CE;DE (the default) is deliberately first so
 // nothing changes until M is pressed.
-var _spikeMaps = ["CE;DE", "C13;D13", "C14;D14", "C15;D15", "C21;D21", "C3;D3", "C4;D4"];
+// Ordered by measured terrain variation (height std over a 1024x1024 sample):
+//   C21 33.5 | C14 31.8 | C15 24.2 | C13 15.1 | C3/C4 have 512x512 height
+//   maps that get upscaled to 1024, so they read softer. CE;DE is last: it
+//   is the flat featureless grey arena, kept only for comparison.
+var _spikeMaps = ["C21;D21", "C14;D14", "C15;D15", "C13;D13", "C3;D3", "C4;D4", "CE;DE"];
 var _spikeMapIndex = 0;
 
 function DetectKeysDown(e){
