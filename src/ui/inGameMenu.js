@@ -182,7 +182,8 @@ var InGameMenu = (function () {
     function _refreshMap() {
         var canvas = document.getElementById('ingame-map-canvas');
         if (!canvas) return;
-        if (typeof map === 'undefined' || !map.color || !map.color.length) return;
+        if (typeof Terrain === 'undefined' || !Terrain.rawMap().color ||
+            !Terrain.rawMap().color.length) return;
 
         var ctx = canvas.getContext('2d');
         var cw  = canvas.width;   // 480
@@ -194,9 +195,12 @@ var InGameMenu = (function () {
             var data    = imgData.data;
             for (var py = 0; py < ch; py++) {
                 for (var px = 0; px < cw; px++) {
-                    var mx  = Math.floor(px * map.width  / cw);
-                    var my  = Math.floor(py * map.height / ch);
-                    var col = map.color[(my << map.shift) + mx];
+                    // CELL space on purpose: this is the whole-map overview, so
+                    // it walks the heightmap itself rather than world positions
+                    // and must not wrap.
+                    var mx  = Math.floor(px * Terrain.mapWidth()  / cw);
+                    var my  = Math.floor(py * Terrain.mapHeight() / ch);
+                    var col = Terrain.colorAtCell(mx, my);
                     var idx = (py * cw + px) << 2;
                     data[idx]     = col         & 0xFF;   // R
                     data[idx + 1] = (col >> 8)  & 0xFF;  // G

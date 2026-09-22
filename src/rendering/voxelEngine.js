@@ -3,27 +3,14 @@
 // ===============================
 "use strict";
 
-// Terrain height functions
-var getRawTerrainHeight=(x,y)=>map.altitude[((Math.floor(y)&(map.width-1))<<map.shift)+(Math.floor(x)&(map.height-1))];
+// Terrain height functions.
+// These are now thin delegates to Terrain (src/map/terrain.js), which owns
+// every read of map.altitude/map.color. The global names are kept because
+// ~20 call sites use them and there is no value in churning those; what
+// matters is that the world's shape is defined in one place.
+var getRawTerrainHeight = (x, y) => Terrain.heightAt(x, y);
 
-// Get ground height including cube top surface
-function getGroundHeight(x, y) {
-    var terrainHeight = getRawTerrainHeight(x, y) + playerHeightOffset;
-
-    // Check if position is within cube's X/Y bounds
-    var halfSize = cube.size / 2;
-    if (x >= cube.x - halfSize && x <= cube.x + halfSize &&
-        y >= cube.y - halfSize && y <= cube.y + halfSize) {
-        // Player is above cube footprint - check cube top
-        var cubeBaseZ = getRawTerrainHeight(cube.x, cube.y);
-        var cubeTopZ = cubeBaseZ + cube.size + playerHeightOffset;
-
-        // Return the higher of terrain or cube top
-        return Math.max(terrainHeight, cubeTopZ);
-    }
-
-    return terrainHeight;
-}
+function getGroundHeight(x, y) { return Terrain.groundAt(x, y); }
 
 // Render terrain using voxel space algorithm
 function Render(){
@@ -31,17 +18,23 @@ function Render(){
         sinang=Math.sin(camera.angle),cosang=Math.cos(camera.angle),
         deltaz=1,depth=screendata.depthBuffer;
 
+    // Hoisted once per frame. The sample loop below runs millions of times, so
+    // it reads these arrays directly rather than calling Terrain per pixel --
+    // the seam still owns the INDEX (Terrain.indexAt), which is the part that
+    // changes shape when the world becomes tiled.
+    var _m=Terrain.rawMap(), terrainAlt=_m.altitude, terrainCol=_m.color;
+
     hiddeny.fill(sh);
     for(var z=1;z<camera.distance;z+=deltaz){
         var plx=-cosang*z-sinang*z,ply=sinang*z-cosang*z,prx=cosang*z-sinang*z,pry=-sinang*z-cosang*z,dx=(prx-plx)/sw,dy=(pry-ply)/sw;
         plx+=camera.x;ply+=camera.y;var invz = camera.focalLength / z;
         for(var i=0;i<sw;i++){
-            var mapoffset=((Math.floor(ply)&(map.width-1))<<map.shift)+(Math.floor(plx)&(map.height-1));
-            var heightonscreen=(camera.height-map.altitude[mapoffset])*invz+camera.horizon;
+            var mapoffset=Terrain.indexAt(plx,ply);
+            var heightonscreen=(camera.height-terrainAlt[mapoffset])*invz+camera.horizon;
             if(heightonscreen<hiddeny[i]){
                 for(var k=heightonscreen|0;k<hiddeny[i];k++){
                     var idx=k*sw+i;
-                    if(z<depth[idx]){screendata.buf32[idx]=map.color[mapoffset];depth[idx]=z;}
+                    if(z<depth[idx]){screendata.buf32[idx]=terrainCol[mapoffset];depth[idx]=z;}
                 }
                 hiddeny[i]=heightonscreen;
             }

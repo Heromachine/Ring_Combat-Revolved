@@ -45,9 +45,7 @@ function DrawMinimap() {
         for (var wx = -range; wx <= range; wx += sampleStep) {
             var worldX = camera.x + wx;
             var worldY = camera.y + wy;
-            var mapX = ((Math.floor(worldX) % map.width)  + map.width)  % map.width;
-            var mapY = ((Math.floor(worldY) % map.height) + map.height) % map.height;
-            var col  = map.color[(mapY << map.shift) + mapX];
+            var col  = Terrain.colorAt(worldX, worldY);
             if (!col) continue;
 
             var r = col         & 0xFF;
@@ -201,9 +199,7 @@ function DrawDebugMinimap() {
         for (var px = 0; px < size; px += 2) {
             var wx = camera.x + (px - size / 2) / scale;
             var wy = camera.y + (py - size / 2) / scale;
-            var mapX = Math.floor(wx) & (map.width - 1);
-            var mapY = Math.floor(wy) & (map.height - 1);
-            var col = map.color[(mapY << map.shift) + mapX];
+            var col = Terrain.colorAt(wx, wy);
             var r = col & 0xFF;
             var g = (col >> 8) & 0xFF;
             var b = (col >> 16) & 0xFF;

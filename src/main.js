@@ -225,7 +225,9 @@ function Init(){
     _loopActive = true;
     var _gc = document.getElementById('game-container');
     if (_gc) _gc.style.display = '';
-    for(var i=0;i<map.width*map.height;i++){map.color[i]=0xFF007050;map.altitude[i]=0;}
+    // AUTHORING: flat default fill before the real map loads.
+    var _m=Terrain.rawMap();
+    for(var i=0;i<_m.width*_m.height;i++){_m.color[i]=0xFF007050;_m.altitude[i]=0;}
     LoadMap("CE;DE");
     OnResizeWindow();
     loadGunModel();

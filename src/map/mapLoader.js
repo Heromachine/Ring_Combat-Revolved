@@ -31,12 +31,16 @@ function LoadMap(files){
 
 function OnLoadedImages(result){
     var datac = result[0], datah = result[1];
-    for (var i = 0; i < map.width * map.height; i++) {
-        map.color[i] = 0xFF000000 |
-                       (datac[(i<<2)+2] << 16) |
-                       (datac[(i<<2)+1] << 8) |
-                        datac[(i<<2)+0];
-        map.altitude[i] = datah[i<<2];
+    // AUTHORING: writes a whole heightmap, so it goes through the raw door
+    // rather than the sampling accessors. When the tile pool lands, this
+    // becomes "load one tile into the pool".
+    var m = Terrain.rawMap();
+    for (var i = 0; i < m.width * m.height; i++) {
+        m.color[i] = 0xFF000000 |
+                     (datac[(i<<2)+2] << 16) |
+                     (datac[(i<<2)+1] << 8) |
+                      datac[(i<<2)+0];
+        m.altitude[i] = datah[i<<2];
     }
 
     // Flatten terrain under the cube
@@ -55,25 +59,21 @@ function flattenTerrainUnderCube() {
     var maxY = Math.ceil(cube.y + s/2);
 
     // Find the minimum height within the cube's footprint
+    // AUTHORING: reshapes terrain in place. Reads go through the seam's index
+    // helper so the wrap rule lives in one place; the write stays raw.
+    var m = Terrain.rawMap();
     var minHeight = 255;
     for (var y = minY; y <= maxY; y++) {
         for (var x = minX; x <= maxX; x++) {
-            var mx = x & (map.width - 1);
-            var my = y & (map.height - 1);
-            var idx = (my << map.shift) + mx;
-            if (map.altitude[idx] < minHeight) {
-                minHeight = map.altitude[idx];
-            }
+            var h = Terrain.heightAt(x, y);
+            if (h < minHeight) minHeight = h;
         }
     }
 
     // Set all terrain within cube footprint to that minimum height
     for (var y = minY; y <= maxY; y++) {
         for (var x = minX; x <= maxX; x++) {
-            var mx = x & (map.width - 1);
-            var my = y & (map.height - 1);
-            var idx = (my << map.shift) + mx;
-            map.altitude[idx] = minHeight;
+            m.altitude[Terrain.indexAt(x, y)] = minHeight;
         }
     }
 
