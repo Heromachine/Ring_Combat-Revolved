@@ -3,6 +3,12 @@
 // ===============================
 "use strict";
 
+// PHASE 1 SPIKE: map pairs with real terrain, for judging the ring.
+// Format is "colour;height". CE;DE (the default) is deliberately first so
+// nothing changes until M is pressed.
+var _spikeMaps = ["CE;DE", "C13;D13", "C14;D14", "C15;D15", "C21;D21", "C3;D3", "C4;D4"];
+var _spikeMapIndex = 0;
+
 function DetectKeysDown(e){
     switch(e.keyCode){
         case 87:input.forward=true;break;
@@ -35,6 +41,18 @@ function DetectKeysDown(e){
             if(!isAdmin) break;
             var ctrl=document.getElementById('controls');
             ctrl.style.display=ctrl.style.display==='none'?'block':'none';
+            break;
+        case 77: // M — PHASE 1 SPIKE: cycle terrain maps
+            // The default CE;DE is a flat featureless light-grey test arena
+            // (its whole palette is rgb(193,193,192)), which makes the ring
+            // impossible to judge -- no landmarks, so no sense of motion,
+            // distance or curvature. These pairs have real terrain.
+            if (typeof _spikeMaps !== 'undefined') {
+                _spikeMapIndex = (_spikeMapIndex + 1) % _spikeMaps.length;
+                var _mp = _spikeMaps[_spikeMapIndex];
+                LoadMap(_mp);
+                console.log("Map:", _mp, "(press M to cycle)");
+            }
             break;
         case 79: // O — PHASE 1 SPIKE: toggle ring world on/off
             if (typeof ringWorld !== 'undefined') {

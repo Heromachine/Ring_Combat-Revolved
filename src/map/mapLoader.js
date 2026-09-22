@@ -46,6 +46,11 @@ function OnLoadedImages(result){
     // Flatten terrain under the cube
     flattenTerrainUnderCube();
 
+    // Swapping maps can leave the player buried in the new terrain. Lift them
+    // to ground level if they are below it; never push them down.
+    var _g = getGroundHeight(camera.x, camera.y);
+    if (camera.height < _g) { camera.height = _g; camera.velocityY = 0; }
+
     // Start draw loop
     Draw();
 }
