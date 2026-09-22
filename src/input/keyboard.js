@@ -82,6 +82,33 @@ function DetectKeysDown(e){
                 }
                 Terrain.setSource(_next);
                 camera.height = Math.max(camera.height, getGroundHeight(camera.x, camera.y));
+
+                // Scenery was placed against the OLD world, so it is now
+                // floating over, or buried in, terrain that has changed
+                // underneath it. Drop the trees and re-scatter against
+                // whichever world is now live.
+                if (typeof items !== 'undefined') {
+                    for (var _i = items.length - 1; _i >= 0; _i--) {
+                        if (items[_i] && items[_i].type === 'tree') items.splice(_i, 1);
+                    }
+                    if (typeof spawnRandomItems === 'function' && typeof textures !== 'undefined') {
+                        spawnRandomItems('tree', textures.tree, {
+                            step: 8, chance: 0.01,
+                            colorCheck: function (col) { return (col & 0x00FF00) > 0x004000; }
+                        });
+                    }
+                }
+                // Enemies re-ground themselves each frame, but nudge them now
+                // so they are not left inside a hill for a moment.
+                if (typeof enemies !== 'undefined') {
+                    for (var _e = 0; _e < enemies.length; _e++) {
+                        if (enemies[_e]) enemies[_e].z = getRawTerrainHeight(enemies[_e].x, enemies[_e].y);
+                    }
+                }
+                // The menu map caches its terrain image; the world just changed.
+                if (typeof InGameMenu !== 'undefined' && InGameMenu.invalidateMapCache) {
+                    InGameMenu.invalidateMapCache();
+                }
                 console.log("Near terrain:", _next === 'chunk'
                     ? "PROCEDURAL CHUNKS (never repeats)"
                     : "TILED MAP (repeats every 1024 WU)");

@@ -15,7 +15,8 @@ var InGameMenu = (function () {
 
     var _open            = false;
     var _activeTab       = 'menu';
-    var _mapTerrainCache = null;   // cached ImageData of the world terrain (rebuilt on map load)
+    var _mapTerrainCache = null;
+    var _mapCacheAt      = null;   // player position the windowed cache was built at   // cached ImageData of the world terrain (rebuilt on map load)
 
     // ─────────────────────────────────────────────────────────
     // Open / close / toggle
@@ -179,38 +180,98 @@ var InGameMenu = (function () {
     // ─────────────────────────────────────────────────────────
     // Map panel — full world overview
     // ─────────────────────────────────────────────────────────
+    // The view this map is showing, in WORLD units. Two shapes, because the
+    // two worlds are different things:
+    //   tiled map  -- the heightmap IS the world, so show all of it
+    //   chunks     -- the world is unbounded (57,344 WU around the ring), so
+    //                 show a window around the player instead
+    var MAP_WINDOW_WU = 4096;   // span of the chunk-mode window
+    function _mapView() {
+        if (typeof Terrain !== 'undefined' && Terrain.usingChunks && Terrain.usingChunks()) {
+            var cx = (typeof camera !== 'undefined') ? camera.x : 0;
+            var cy = (typeof camera !== 'undefined') ? camera.y : 0;
+            return { ox: cx - MAP_WINDOW_WU / 2, oy: cy - MAP_WINDOW_WU / 2,
+                     span: MAP_WINDOW_WU, windowed: true };
+        }
+        return { ox: 0, oy: 0, span: Terrain.mapWidth(), windowed: false };
+    }
+
     function _refreshMap() {
         var canvas = document.getElementById('ingame-map-canvas');
         if (!canvas) return;
-        if (typeof Terrain === 'undefined' || !Terrain.rawMap().color ||
-            !Terrain.rawMap().color.length) return;
+        if (typeof Terrain === 'undefined') return;
 
         var ctx = canvas.getContext('2d');
         var cw  = canvas.width;   // 480
         var ch  = canvas.height;  // 480
+        var view = _mapView();
 
-        // Build terrain ImageData once and cache it (map data doesn't change at runtime)
+        // A windowed view moves with the player, so the cache has to expire.
+        // Rebuild once the player has left an eighth of the span.
+        if (view.windowed && _mapTerrainCache && _mapCacheAt) {
+            if (Math.abs(camera.x - _mapCacheAt.x) > view.span / 8 ||
+                Math.abs(camera.y - _mapCacheAt.y) > view.span / 8) {
+                _mapTerrainCache = null;
+            }
+        }
+
         if (!_mapTerrainCache) {
             var imgData = ctx.createImageData(cw, ch);
             var data    = imgData.data;
-            for (var py = 0; py < ch; py++) {
-                for (var px = 0; px < cw; px++) {
-                    // CELL space on purpose: this is the whole-map overview, so
-                    // it walks the heightmap itself rather than world positions
-                    // and must not wrap.
-                    var mx  = Math.floor(px * Terrain.mapWidth()  / cw);
-                    var my  = Math.floor(py * Terrain.mapHeight() / ch);
-                    var col = Terrain.colorAtCell(mx, my);
-                    var idx = (py * cw + px) << 2;
-                    data[idx]     = col         & 0xFF;   // R
-                    data[idx + 1] = (col >> 8)  & 0xFF;  // G
-                    data[idx + 2] = (col >> 16) & 0xFF;  // B
-                    data[idx + 3] = 255;                  // A
+
+            if (view.windowed) {
+                // Sample the world FUNCTION on a coarse grid and fill blocks.
+                // Per-pixel would be 230k noise evaluations (~370 ms) for a
+                // menu that opens instantly; 120x120 is ~23 ms and a map does
+                // not need per-pixel detail.
+                var STEP = 4, gw = Math.ceil(cw / STEP), gh = Math.ceil(ch / STEP);
+                for (var gy = 0; gy < gh; gy++) {
+                    var wy = view.oy + (gy * STEP / ch) * view.span;
+                    for (var gx = 0; gx < gw; gx++) {
+                        var wx = view.ox + (gx * STEP / cw) * view.span;
+                        var h  = (typeof WorldGen !== 'undefined')
+                               ? WorldGen.heightAtWorld(wx, wy, 0.5)
+                               : Terrain.heightAt(wx, wy);
+                        var c  = (typeof WorldGen !== 'undefined')
+                               ? WorldGen.colorForHeight(h)
+                               : Terrain.colorAt(wx, wy);
+                        var r = c & 0xFF, g = (c >> 8) & 0xFF, b = (c >> 16) & 0xFF;
+                        for (var by = 0; by < STEP; by++) {
+                            var yy = gy * STEP + by; if (yy >= ch) break;
+                            for (var bx = 0; bx < STEP; bx++) {
+                                var xx = gx * STEP + bx; if (xx >= cw) break;
+                                var o = (yy * cw + xx) << 2;
+                                data[o] = r; data[o+1] = g; data[o+2] = b; data[o+3] = 255;
+                            }
+                        }
+                    }
                 }
+                _mapCacheAt = { x: camera.x, y: camera.y };
+            } else {
+                // CELL space: the heightmap is the whole world here.
+                for (var py = 0; py < ch; py++) {
+                    for (var px = 0; px < cw; px++) {
+                        var mx  = Math.floor(px * Terrain.mapWidth()  / cw);
+                        var my  = Math.floor(py * Terrain.mapHeight() / ch);
+                        var col = Terrain.colorAtCell(mx, my);
+                        var idx = (py * cw + px) << 2;
+                        data[idx]     = col         & 0xFF;
+                        data[idx + 1] = (col >> 8)  & 0xFF;
+                        data[idx + 2] = (col >> 16) & 0xFF;
+                        data[idx + 3] = 255;
+                    }
+                }
+                _mapCacheAt = null;
             }
             _mapTerrainCache = imgData;
         }
         ctx.putImageData(_mapTerrainCache, 0, 0);
+
+        // World -> canvas, matching whichever view is being drawn. Markers
+        // used to divide by map.width directly, which put the player off the
+        // canvas entirely once world coordinates left [0, 1024).
+        var _wx2cx = function (wx) { return ((wx - view.ox) / view.span) * cw; };
+        var _wy2cy = function (wy) { return ((wy - view.oy) / view.span) * ch; };
 
         // ── Dim overlay so markers read clearly ──────────────
         ctx.fillStyle = 'rgba(0,0,0,0.18)';
@@ -222,8 +283,8 @@ var InGameMenu = (function () {
             Object.keys(nakamaState.remotePlayers).forEach(function (uid) {
                 var rp = nakamaState.remotePlayers[uid];
                 if (!rp || now - rp.lastSeen > 5000) return;
-                var rpx = (rp.x / map.width)  * cw;
-                var rpy = (rp.y / map.height) * ch;
+                var rpx = _wx2cx(rp.x);
+                var rpy = _wy2cy(rp.y);
                 ctx.beginPath();
                 ctx.arc(rpx, rpy, 3, 0, Math.PI * 2);
                 ctx.fillStyle = '#ff9900';
@@ -233,8 +294,8 @@ var InGameMenu = (function () {
 
         // ── Player marker (white arrow pointing in look direction) ──
         if (typeof camera !== 'undefined') {
-            var ppx = (camera.x / map.width)  * cw;
-            var ppy = (camera.y / map.height) * ch;
+            var ppx = _wx2cx(camera.x);
+            var ppy = _wy2cy(camera.y);
 
             ctx.save();
             ctx.translate(ppx, ppy);
@@ -271,8 +332,8 @@ var InGameMenu = (function () {
             };
             var markers = QuestManager.getNpcMarkers();
             markers.forEach(function (m) {
-                var mx = (m.x / map.width)  * cw;
-                var my = (m.y / map.height) * ch;
+                var mx = _wx2cx(m.x);
+                var my = _wy2cy(m.y);
                 var color = MARKER_COLOR[m.phase] || '#8ab0c8';
 
                 // Outer ring
@@ -340,7 +401,8 @@ var InGameMenu = (function () {
     // ─────────────────────────────────────────────────────────
     return {
         toggle: toggle, show: show, hide: hide, isOpen: isOpen,
-        init: init, invalidateMapCache: invalidateMapCache
+        init: init, invalidateMapCache: invalidateMapCache,
+        refreshMap: _refreshMap   // exposed so the map view can be tested headlessly
     };
 
 }());
