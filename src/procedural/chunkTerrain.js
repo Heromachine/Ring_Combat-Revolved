@@ -79,6 +79,32 @@ var ChunkTerrain = (function () {
 
         var out = new Uint8Array(CHUNK * CHUNK);
         var inv = 1 / NOISE_STEP;
+
+        // Buildings (src/indoor/buildingPlacer.js) are sited by WorldGen
+        // height and rendered at a fixed baseZ, but the SURROUNDING ground
+        // generated here goes through a coarse lattice + bilinear + hash
+        // detail approximation of that same field -- not identical to it.
+        // Without flattening, the building's floor plane and the chunked
+        // ground around it disagree by a texel or two, which reads as the
+        // building floating or sinking slightly relative to its own
+        // doorstep. So: any registered building whose footprint (+ a blend
+        // apron) overlaps THIS chunk gets its ground forced to that
+        // building's baseZ here, once, at generation time -- not per frame.
+        // Cheap early-out: at most a handful of buildings exist, and this
+        // chunk almost always overlaps none of them (buildings are one per
+        // biome sector, biome sectors are ~8-11k WU wide, chunks are 512).
+        var touching = null;
+        if (typeof buildings !== 'undefined' && buildings.length) {
+            var APRON = 24;
+            for (var bi = 0; bi < buildings.length; bi++) {
+                var bcfg = buildings[bi];
+                var bx0 = bcfg.x - bcfg.width/2 - APRON, bx1 = bcfg.x + bcfg.width/2 + APRON;
+                var by0 = bcfg.y - bcfg.depth/2 - APRON, by1 = bcfg.y + bcfg.depth/2 + APRON;
+                if (ox+CHUNK < bx0 || ox > bx1 || oy+CHUNK < by0 || oy > by1) continue;
+                (touching || (touching = [])).push(bcfg);
+            }
+        }
+
         for (var y = 0; y < CHUNK; y++) {
             var fy = y * inv, j0 = fy | 0, ty = fy - j0, j1 = j0 + 1;
             var r0 = j0 * N, r1 = j1 * N;
@@ -89,6 +115,20 @@ var ChunkTerrain = (function () {
                 var c = lat[r1 + i0], d = lat[r1 + i1];
                 var top = a + (b - a) * tx, bot = c + (d - c) * tx;
                 var h = top + (bot - top) * ty + _detail(ox + x, wy2) * 2.0;
+
+                if (touching) {
+                    var wx2 = ox + x;
+                    for (var ti = 0; ti < touching.length; ti++) {
+                        var t = touching[ti];
+                        var dxIn = Math.max(0, Math.abs(wx2 - t.x) - t.width/2);
+                        var dyIn = Math.max(0, Math.abs(wy2 - t.y) - t.depth/2);
+                        var d2 = Math.sqrt(dxIn*dxIn + dyIn*dyIn);
+                        if (d2 >= APRON) continue;
+                        var bt = 1 - (d2 / APRON);
+                        bt = bt*bt*(3-2*bt);          // smoothstep: no hard rim at the apron edge
+                        h = h + (t.baseZ - h) * bt;
+                    }
+                }
                 out[rowBase + x] = h < 0 ? 0 : (h > 255 ? 255 : h) | 0;
             }
         }

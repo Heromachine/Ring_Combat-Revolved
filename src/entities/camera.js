@@ -8,6 +8,12 @@ var MAX_SLOPE=2;
 var PLAYER_RADIUS = 10; // Player collision radius for cube collision
 var PUSH_OUT_BUFFER = 5; // Extra buffer to prevent camera clipping on rotation
 var isOnGround=()=>camera.height<=getGroundHeight(camera.x,camera.y)+0.1;
+// Last frame's settled camera.height, read by buildingRenderer.js to tell
+// "was inside the roof last frame" apart from "just jumped above it this
+// frame" -- a same-frame check cannot distinguish those once physics has
+// already moved camera.height. Must be var-declared (not just assigned):
+// this file is strict mode, and an undeclared assignment throws there.
+var _cameraHeightPrev = 0;
 
 // Ray-AABB intersection for bullet collision with cube
 // Returns {t: distance, hit: {x,y,z}} or null if no hit
@@ -174,6 +180,7 @@ var canMoveTo=(nx,ny)=>{
     // Check cube collision first
     var playerZ = camera.height;
     if (collidesWithCube(nx, ny, playerZ)) return false;
+    if (typeof getBuildingCollision === 'function' && getBuildingCollision(nx, ny)) return false;
 
     // Original slope checking (only when on ground)
     if(!isOnGround())return true;
@@ -277,6 +284,26 @@ function UpdateCamera(){
 
     camera.velocityY-=0.5*deltaTime;camera.height+=camera.velocityY*deltaTime;
 
+    // Ceiling clamp: a building roof stops upward motion from inside, the
+    // same way the ground stops downward motion below. Must run before the
+    // ground clamp reads groundHeight, since standing exactly at a clamped
+    // ceiling with camera.height an epsilon above the roof line would
+    // otherwise sometimes read as "on the roof" for one frame.
+    //
+    // getBuildingCeiling/getBuildingRoofGround read _cameraHeightPrev
+    // (declared at module scope above) rather than taking a parameter, so
+    // groundAt's many other callers (minimap, item placement, mapLoader)
+    // don't need to know it exists. It still holds LAST frame's final
+    // height at this point -- only updated at the very end of this function,
+    // after physics and both clamps have settled this frame's real height.
+    if (typeof getBuildingCeiling === 'function') {
+        var _ceilH = getBuildingCeiling(camera.x, camera.y);
+        if (camera.height > _ceilH) {
+            camera.height = _ceilH;
+            if (camera.velocityY > 0) camera.velocityY = 0;
+        }
+    }
+
     // Ground clamping FIRST - ensures consistent state for jump check
     var groundHeight=getGroundHeight(camera.x,camera.y);
     var wasInAir = camera.height > groundHeight + 1; // track if falling
@@ -284,6 +311,8 @@ function UpdateCamera(){
         camera.height = groundHeight;
         camera.velocityY = 0;
     }
+
+    _cameraHeightPrev = camera.height;
 
     // Crouch handling
     var isCrouching = input.crouch || input.gpCrouch;

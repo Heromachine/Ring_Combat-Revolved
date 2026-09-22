@@ -183,6 +183,7 @@ function Draw(timestamp){
         QuestManager.update();
         DrawBackground();
         RenderCube();
+        if (typeof RenderBuilding === 'function') RenderBuilding();
         RenderGreenCube();
         RenderShadowCube();
         Render();
@@ -250,6 +251,12 @@ function Init(){
     // default now, so without this the player spawns over terrain that has
     // not been generated and falls through the LOD fallback.
     if (typeof initRingWorld === 'function') initRingWorld();
+    // Buildings are sited from the ring's biomes (src/indoor/buildingPlacer.js),
+    // so this must run after initRingWorld() configured WorldGen, and before
+    // any chunk generates below -- chunkTerrain.js flattens ground under a
+    // building's footprint at GENERATION time, so a chunk generated before
+    // its building was placed would never get flattened for it.
+    if (typeof placeBuildings === 'function') placeBuildings();
     if (typeof Terrain !== 'undefined' && Terrain.usingChunks && Terrain.usingChunks()) {
         ChunkTerrain.reset();
         ChunkTerrain.requestAround(camera.x, camera.y, camera.distance);

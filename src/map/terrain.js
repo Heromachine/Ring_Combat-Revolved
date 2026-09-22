@@ -86,7 +86,19 @@ var Terrain = (function () {
         if (worldX >= cube.x - halfSize && worldX <= cube.x + halfSize &&
             worldY >= cube.y - halfSize && worldY <= cube.y + halfSize) {
             var cubeTopZ = heightAt(cube.x, cube.y) + cube.size + playerHeightOffset;
-            return Math.max(terrainHeight, cubeTopZ);
+            terrainHeight = Math.max(terrainHeight, cubeTopZ);
+        }
+
+        // Buildings: roof acts as solid ground on top (same idea as the cube
+        // top above); floor plane acts as ground while inside the footprint,
+        // for the tiled-PNG-map path where chunkTerrain's flatten pass never
+        // runs. In chunk mode the flatten pass already makes this agree, so
+        // these two calls are typically a same-value no-op there.
+        if (typeof getBuildingRoofGround === 'function') {
+            terrainHeight = Math.max(terrainHeight, getBuildingRoofGround(worldX, worldY));
+        }
+        if (typeof getBuildingFloorGround === 'function') {
+            terrainHeight = Math.max(terrainHeight, getBuildingFloorGround(worldX, worldY));
         }
         return terrainHeight;
     }
