@@ -82,6 +82,19 @@ var ringWorld = {
     // cells, which is the smallest stable unit that still shows structure.
     mipSize: 32,
 
+    // ---- Procedural far side ----
+    // When WorldGen is available, the far-side LOD is built by evaluating the
+    // terrain FUNCTION over the ring's whole extent instead of mipping one
+    // repeated heightmap. Measured against the tiled mip, relief x4:
+    //     tiled C21 mip 32     relief 2v3 17.1%   shimmer 6.2%
+    //     ring-extent noise     relief 2v3  1.4%   shimmer 1.9%
+    // The relief refinement CONVERGES on the procedural field -- the
+    // non-convergence noted above is a property of sampling a repeated
+    // hand-made heightmap, not of the method.
+    procedural: true,
+    lodAround: 1024,   // LOD cells around the loop
+    lodAcross: 64,     // LOD cells across the band
+
     // ---- computed by initRingWorld() ----
     ringLength: 0, ringRadius: 0, flatRadius: 0, detailDistance: 0, halfWidth: 0,
     _invR: 0, _halfLen: 0
@@ -110,7 +123,35 @@ function initRingWorld() {
     // draws everything beyond, so there is no point marching further.
     camera.distance = ringWorld.flatRadius + ringWorld.detailDistance;
 
-    buildRingMip();
+    if (ringWorld.procedural && typeof WorldGen !== 'undefined') {
+        WorldGen.configure(ringWorld.ringLength);
+        buildRingNoiseLOD();
+    } else {
+        buildRingMip();
+    }
+}
+
+// Far-side LOD sampled from the terrain FUNCTION across the whole ring, so
+// nothing repeats and the field is smooth by construction. Replaces mipping
+// a single tiled heightmap.
+function buildRingNoiseLOD() {
+    var A = ringWorld.lodAround | 0, C = ringWorld.lodAcross | 0;
+    var dy = ringWorld.ringLength / A;
+    var dx = (ringWorld.halfWidth * 2) / C;
+    var col = new Uint32Array(A * C), hgt = new Float32Array(A * C);
+
+    for (var j = 0; j < A; j++) {
+        var wy = -ringWorld._halfLen + j * dy;
+        for (var i = 0; i < C; i++) {
+            var wx = -ringWorld.halfWidth + i * dx;
+            var h = WorldGen.heightAtWorld(wx, wy, 0.5);   // reduced octaves
+            var o = j * C + i;
+            hgt[o] = h;
+            col[o] = WorldGen.colorForHeight(h);
+        }
+    }
+    ringMip = { procedural: true, around: A, across: C, dy: dy, dx: dx,
+                color: col, height: hgt };
 }
 
 // Averaged colour+height grid used ONLY by the backdrop. Rebuilt whenever the
@@ -149,8 +190,17 @@ function buildRingMip() {
     ringMip = { size: N, cellWU: m.width / N, color: col, height: hgt };
 }
 
-// Mip lookup in world space, wrapping like the heightmap does.
+// LOD lookup in world space. Two layouts: the procedural grid is indexed
+// around/across the ring (so it wraps once per lap and clamps at the band
+// edges), the mip wraps like the heightmap.
 function ringMipIndex(x, y) {
+    if (ringMip.procedural) {
+        var j = Math.floor((ringWrapY(y) + ringWorld._halfLen) / ringMip.dy) % ringMip.around;
+        if (j < 0) j += ringMip.around;
+        var i = Math.floor((x + ringWorld.halfWidth) / ringMip.dx);
+        if (i < 0) i = 0; else if (i >= ringMip.across) i = ringMip.across - 1;
+        return j * ringMip.across + i;
+    }
     var N = ringMip.size, c = ringMip.cellWU;
     var cx = Math.floor(x / c) % N; if (cx < 0) cx += N;
     var cy = Math.floor(y / c) % N; if (cy < 0) cy += N;

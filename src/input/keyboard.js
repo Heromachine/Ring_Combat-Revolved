@@ -46,6 +46,15 @@ function DetectKeysDown(e){
             var ctrl=document.getElementById('controls');
             ctrl.style.display=ctrl.style.display==='none'?'block':'none';
             break;
+        case 80: // P — PHASE 1 SPIKE: procedural far side vs the tiled mip
+            if (typeof ringWorld !== 'undefined') {
+                ringWorld.procedural = !ringWorld.procedural;
+                initRingWorld();
+                console.log("Far side:", ringWorld.procedural
+                    ? "PROCEDURAL (ring-extent noise, nothing repeats)"
+                    : "TILED MIP (one heightmap repeated 56x)");
+            }
+            break;
         case 75: // K — PHASE 1 SPIKE: toggle relief on the outer ring
             if (typeof ringWorld !== 'undefined') {
                 ringWorld.relief = !ringWorld.relief;
