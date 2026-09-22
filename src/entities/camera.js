@@ -226,6 +226,20 @@ function UpdateCamera(){
         camera.y += (ny - camera.y) * slopeMult;
     }
 
+    // ---- RING: the band has hard edges ----
+    // A slope barrier is not enough. canMoveTo() begins with
+    //     if (!isOnGround()) return true;
+    // so every slope check is skipped while airborne -- you could jump at the
+    // rim, move freely mid-air, land on top of the wall and walk out across
+    // the plateau beyond. This clamp is positional, so it holds whether the
+    // player is grounded, jumping or falling.
+    if (typeof ringWorld !== 'undefined' && ringWorld.enabled &&
+        typeof WorldGen !== 'undefined' && WorldGen.config.edgeWall) {
+        var _lim = WorldGen.config.bandHalfWidth - WorldGen.config.wallRamp;
+        if (camera.x >  _lim) camera.x =  _lim;
+        else if (camera.x < -_lim) camera.x = -_lim;
+    }
+
     // ---- RING: close the loop ----
     // This single line is what makes the ring WALKABLE rather than a visual
     // effect. Walk far enough along Y and you arrive back where you started.

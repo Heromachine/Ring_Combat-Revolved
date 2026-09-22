@@ -60,9 +60,14 @@ var WorldGen = (function () {
         // charged jump is about 1 m.
         bandHalfWidth: 3584,   // set from ringWorld.halfWidth by configure()
         edgeWall:      true,
-        wallRamp:      40,     // WU over which the wall rises
-        wallRise:      130,    // WU above local terrain at the top
-        wallCap:       250     // chunk heights are Uint8; stay under 255
+        wallRamp:      20,     // WU over which the wall rises -- short, so it reads as a face
+        wallTop:       250,    // ABSOLUTE height of the wall top; chunk heights
+                               // are Uint8, so stay under 255
+        // Any height at or above this only ever occurs in the wall (terrain
+        // tops out near maxHeight 120), so the colour lookup can key metal
+        // off it. The LUT is indexed by HEIGHT ALONE, which is why the wall
+        // has to be identifiable by height rather than by position.
+        wallColorFrom: 170
     };
 
     var _L = 1;   // ring length in WU, set by configure()
@@ -111,8 +116,10 @@ var WorldGen = (function () {
                 var t = (ax - inner) / cfg.wallRamp;
                 if (t > 1) t = 1;
                 t = t * t * (3 - 2 * t);
-                h += cfg.wallRise * t;
-                if (h > cfg.wallCap) h = cfg.wallCap;
+                // Lerp toward an ABSOLUTE top rather than adding to the local
+                // ground: adding inherited the terrain's variation and left
+                // the wall top rolling by ~20 WU instead of flat.
+                h = h + (cfg.wallTop - h) * t;
             }
         }
         return h;
@@ -127,6 +134,15 @@ var WorldGen = (function () {
     function colorForHeight(h) {
         var s = cfg.seaLevel, mx = cfg.maxHeight;
         var r, g, b;
+
+        // Rim wall: flat brushed metal, so the band edge reads as structure
+        // rather than as a very tall mountain.
+        if (cfg.edgeWall && h >= cfg.wallColorFrom) {
+            var band = Math.floor(h) % 3;            // faint vertical banding
+            var v = 138 + band * 6;
+            return (0xFF000000 | (v << 16) | (v << 8) | v) >>> 0;
+        }
+
         if (h <= s + 1)            { r = 38;  g = 78;  b = 120; }  // water
         else if (h < s + 10)       { r = 186; g = 176; b = 128; }  // sand
         else if (h < mx * 0.45)    { r = 62;  g = 104; b = 52;  }  // grass
