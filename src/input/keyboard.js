@@ -46,6 +46,12 @@ function DetectKeysDown(e){
             var ctrl=document.getElementById('controls');
             ctrl.style.display=ctrl.style.display==='none'?'block':'none';
             break;
+        case 75: // K — PHASE 1 SPIKE: toggle relief on the outer ring
+            if (typeof ringWorld !== 'undefined') {
+                ringWorld.relief = !ringWorld.relief;
+                console.log("Outer-ring relief:", ringWorld.relief ? "ON" : "OFF (smooth cylinder)");
+            }
+            break;
         case 77: // M — PHASE 1 SPIKE: cycle terrain maps
             // The default CE;DE is a flat featureless light-grey test arena
             // (its whole palette is rgb(193,193,192)), which makes the ring

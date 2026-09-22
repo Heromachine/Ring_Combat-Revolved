@@ -43,6 +43,18 @@ var ringWorld = {
 
     tileAdvance: 896,           // VoxelMaster's tileWidth(1024) - overlapSize(128)
 
+    // ---- Outer-ring relief ----
+    // VoxelMaster's backdrop (and Ringscape's) samples COLOUR only and
+    // intersects a perfectly smooth cylinder, so the far side of the loop has
+    // no mountains and a clean circular silhouette. With relief on, the
+    // surface radius is perturbed by the terrain height at the hit point,
+    // which makes the intersection iterative instead of one closed-form
+    // solve -- the height depends on where you hit, which depends on the
+    // height. Two refinements are plenty at this distance.
+    relief: true,
+    reliefIterations: 2,
+    reliefScale: 1.0,   // raise above 1 to exaggerate distant mountains
+
     // ---- computed by initRingWorld() ----
     ringLength: 0, ringRadius: 0, flatRadius: 0, detailDistance: 0, halfWidth: 0,
     _invR: 0, _halfLen: 0
@@ -116,7 +128,8 @@ function RenderRingBackdrop() {
 
     var sw  = screendata.canvas.width,
         sh  = screendata.canvas.height,
-        buf = screendata.buf32;
+        buf = screendata.buf32,
+        depth = screendata.depthBuffer;
 
     var sinang = Math.sin(camera.angle), cosang = Math.cos(camera.angle);
     var Fx = -sinang, Fy = -cosang;   // camera forward (world XY)
@@ -132,6 +145,9 @@ function RenderRingBackdrop() {
     var ownedArc = ringWorld.flatRadius + ringWorld.detailDistance;
 
     var S = 2;   // sample in SxS blocks, same as Ringscape
+
+    var reliefIters = ringWorld.relief ? (ringWorld.reliefIterations | 0) : 0;
+    var reliefScale = ringWorld.reliefScale;
 
     // Pitched camera basis chosen to AGREE WITH THE TERRAIN PASS. The terrain
     // pass is a shear projection putting the horizon at row camera.horizon and
@@ -165,34 +181,59 @@ function RenderRingBackdrop() {
             var rl = Math.sqrt(rxv * rxv + ryv * ryv + rzv * rzv);
             rxv /= rl; ryv /= rl; rzv /= rl;
 
-            // Intersect the ring cylinder (axis along X) via its Y,Z components
+            // Intersect the ring cylinder (axis along X) via its Y,Z components.
+            // A and B do not depend on the surface radius, so they are solved
+            // once even when relief re-solves for t below.
             var A = ryv * ryv + rzv * rzv;
             if (A < 1e-9) continue;
             var B = 2 * rzv * Cc;
-            var disc = B * B - 4 * A * Cconst;
-            if (disc < 0) continue;                 // ray misses the ring
-            var t = (-B + Math.sqrt(disc)) / (2 * A);
-            if (t <= 0) continue;
 
-            var Yr  = ryv * t;
-            var Zs  = camH + rzv * t;
-            var psi = Math.atan2(Yr, R - Zs);       // angle around the loop
+            var Rq = R;            // surface radius at the hit point
+            var t = 0, psi = 0, tx = 0, ty = 0, ok = false;
 
-            if (Math.abs(R * psi) <= ownedArc) continue;  // perspective pass owns it
+            for (var it = 0; it <= reliefIters; it++) {
+                var disc = B * B - 4 * A * (Cc * Cc - Rq * Rq);
+                if (disc < 0) break;                       // ray misses the ring
+                t = (-B + Math.sqrt(disc)) / (2 * A);
+                if (t <= 0) break;
 
-            var tx = camera.x + rxv * t;
-            if (!ringInsideWidth(tx)) continue;     // outside the band -> open void
+                var Zs = camH + rzv * t;
+                psi = Math.atan2(ryv * t, R - Zs);         // angle around the loop
+                tx  = camera.x + rxv * t;
+                if (!ringInsideWidth(tx)) break;           // outside the band -> void
+
+                ty = ringWrapY(camera.y + R * psi);        // arc uses the NOMINAL radius
+                ok = true;
+                if (it === reliefIters) break;
+
+                // Terrain on the inside of a ring rises toward the axis, so a
+                // taller sample means a SMALLER surface radius. Feed it back
+                // and re-solve.
+                Rq = R - Terrain.heightAt(tx, ty) * reliefScale;
+                ok = false;
+            }
+            if (!ok) continue;
+
+            if (Math.abs(R * psi) <= ownedArc) continue;   // perspective pass owns it
 
             // Single-map spike: sample the real heightmap instead of a LOD
             // average. It is one array index here, so there is nothing to gain
             // from precomputing averages the way VoxelMaster has to.
-            var col = Terrain.colorAt(tx, ringWrapY(camera.y + R * psi));
+            var col = Terrain.colorAt(tx, ty);
             if (!col) continue;
 
             for (var yy = y; yy < y + S && yy < sh; yy++) {
                 var row = yy * sw;
                 for (var xx = x; xx < x + S && xx < sw; xx++) {
-                    if (yy < hiddeny[xx]) buf[row + xx] = col;  // keep near terrain crisp
+                    var di = row + xx;
+                    // hiddeny keeps near terrain crisp; the depth test stops the
+                    // far side of the loop painting over anything already drawn
+                    // in front of it -- cubes are rendered BEFORE Render() and
+                    // were being overwritten.
+                    if (yy < hiddeny[xx] && t < depth[di]) {
+                        buf[di] = col;
+                        depth[di] = t;
+                    }
                 }
             }
         }
