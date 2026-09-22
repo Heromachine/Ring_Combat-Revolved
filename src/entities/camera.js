@@ -11,6 +11,29 @@ var isOnGround=()=>camera.height<=getGroundHeight(camera.x,camera.y)+0.1;
 
 // Ray-AABB intersection for bullet collision with cube
 // Returns {t: distance, hit: {x,y,z}} or null if no hit
+// How far the crosshair ray is probed when deciding what you are aiming at.
+// Beyond this the shot simply travels parallel to the look direction.
+var AIM_MAX_DISTANCE = 2000;
+// Terrain march step, in world units. Smaller = more exact aim point on
+// ground at the cost of more samples per shot; the hit is then bisected.
+var AIM_TERRAIN_STEP = 4;
+
+// Nearest positive intersection distance of a ray with a sphere, or null.
+function raySphereT(ox, oy, oz, d, cx, cy, cz, radius) {
+    var mx = ox - cx, my = oy - cy, mz = oz - cz;
+    var a  = d.x*d.x + d.y*d.y + d.z*d.z;
+    var b  = 2 * (mx*d.x + my*d.y + mz*d.z);
+    var c  = mx*mx + my*my + mz*mz - radius*radius;
+    var disc = b*b - 4*a*c;
+    if (disc < 0) return null;
+    var sq = Math.sqrt(disc);
+    var t1 = (-b - sq) / (2*a);
+    var t2 = (-b + sq) / (2*a);
+    if (t1 >= 0) return t1;
+    if (t2 >= 0) return t2;
+    return null;
+}
+
 function rayIntersectsCube(rayOrigin, rayDir, segmentLength) {
     var halfSize = cube.size / 2;
     var cubeBaseZ = getRawTerrainHeight(cube.x, cube.y);
@@ -424,28 +447,90 @@ function UpdateCamera(){
     }
     player.wasShooting = isShooting;
 
-    // Helper: compute aim direction for current ADS/hip state
-    function getAimDir() {
-        var bYawRad = (gunModel.barrelYaw || 0) * Math.PI / 180;
-        var adx, ady, adz;
-        if (gunModel.pivotMode === 'barrel') {
-            var scY = screendata.canvas.height / 2;
-            var scPitch = Math.atan((camera.horizon - scY) / camera.focalLength);
-            var aAngle = camera.angle + bYawRad;
-            adx = -Math.sin(aAngle) * Math.cos(scPitch);
-            ady = -Math.cos(aAngle) * Math.cos(scPitch);
-            adz = Math.sin(scPitch);
-        } else {
-            var sw2 = screendata.canvas.width, sh2 = screendata.canvas.height;
-            var hx2 = sw2 / 2 + gunModel.hipOffsetX, hy2 = sh2 / 2 + gunModel.hipOffsetY;
-            var hAng2 = Math.atan((hx2 - sw2 / 2) / (sw2 / 2));
-            var haAngle = camera.angle - hAng2 + bYawRad;
-            var hPitch2 = Math.atan((camera.horizon - hy2) / camera.focalLength);
-            adx = -Math.sin(haAngle) * Math.cos(hPitch2);
-            ady = -Math.cos(haAngle) * Math.cos(hPitch2);
-            adz = Math.sin(hPitch2);
+    // Helper: the ray the CROSSHAIR looks down.
+    // #crosshair is CSS-pinned to top:50%/left:50% of the container, so it is
+    // always the exact screen centre regardless of gun position. Yaw is plain
+    // camera.angle; pitch comes from where the horizon sits relative to centre.
+    function getCrosshairDir() {
+        var scY    = screendata.canvas.height / 2;
+        var pitch  = Math.atan((camera.horizon - scY) / camera.focalLength);
+        var cosP   = Math.cos(pitch);
+        return {
+            x: -Math.sin(camera.angle) * cosP,
+            y: -Math.cos(camera.angle) * cosP,
+            z:  Math.sin(pitch)
+        };
+    }
+
+    // Helper: what the crosshair is actually pointing AT.
+    // Casts from the eye down the crosshair ray and returns the nearest
+    // surface it meets -- cube, remote player, test target or terrain. If it
+    // meets nothing, returns a point far down the ray so distant shots still
+    // travel parallel to where you are looking.
+    function getAimPoint() {
+        var d    = getCrosshairDir();
+        var ox   = camera.x, oy = camera.y, oz = camera.height;
+        var best = AIM_MAX_DISTANCE;
+
+        // Cubes
+        var ch = rayIntersectsCube({x:ox,y:oy,z:oz}, d, AIM_MAX_DISTANCE);
+        if (ch && ch.t < best) best = ch.t;
+
+        // Remote players -- same sphere the bullet collision uses, so the
+        // converged ray lands on exactly what the bullet will test against.
+        if (typeof Multiplayer !== "undefined" && Multiplayer.isConnected()) {
+            var myId  = NakamaClient.getUserId();
+            var rpIds = Object.keys(nakamaState.remotePlayers);
+            for (var ri = 0; ri < rpIds.length; ri++) {
+                var rp = nakamaState.remotePlayers[rpIds[ri]];
+                if (!rp || rp.userId === myId || rp.health <= 0) continue;
+                var rad  = playerHeightOffset * (25 / 70);
+                var midZ = rp.height - playerHeightOffset * (10 / 70);
+                var t = raySphereT(ox, oy, oz, d, rp.x, rp.y, midZ, rad);
+                if (t !== null && t < best) best = t;
+            }
         }
-        return { x: adx, y: ady, z: adz };
+
+        // Admin test target
+        if (testTarget.enabled) {
+            var tt = raySphereT(ox, oy, oz, d, testTarget.x, testTarget.y,
+                                testTarget.z, testTarget.radius);
+            if (tt !== null && tt < best) best = tt;
+        }
+
+        // Terrain: march forward and bisect the first step that goes under.
+        var prev = 0;
+        for (var t2 = AIM_TERRAIN_STEP; t2 <= best; t2 += AIM_TERRAIN_STEP) {
+            var px = ox + d.x * t2, py = oy + d.y * t2, pz = oz + d.z * t2;
+            if (pz <= getRawTerrainHeight(px, py)) {
+                var lo = prev, hi = t2;
+                for (var b = 0; b < 8; b++) {
+                    var mid = (lo + hi) / 2;
+                    var mx = ox + d.x * mid, my = oy + d.y * mid, mz = oz + d.z * mid;
+                    if (mz <= getRawTerrainHeight(mx, my)) hi = mid; else lo = mid;
+                }
+                if (hi < best) best = hi;
+                break;
+            }
+            prev = t2;
+        }
+
+        return { x: ox + d.x * best, y: oy + d.y * best, z: oz + d.z * best };
+    }
+
+    // Helper: aim direction from a given muzzle position to the crosshair's
+    // target point. This is the fix for hip fire shooting low: the bullet used
+    // to travel parallel to wherever the GUN MODEL pointed on screen (the hip
+    // anchor, offset by gunModel.hipOffsetX/Y), not to where the crosshair was
+    // aiming. Now the muzzle is only the origin -- the crosshair decides the
+    // direction, so the shot converges on what you are actually looking at.
+    // ADS was already correct because pivotMode 'barrel' locks to centre.
+    function getAimDir(spawn) {
+        var aim = getAimPoint();
+        var dx  = aim.x - spawn.x, dy = aim.y - spawn.y, dz = aim.z - spawn.z;
+        var mag = Math.hypot(dx, dy, dz);
+        if (!mag || !isFinite(mag)) return getCrosshairDir();  // degenerate: fall back
+        return { x: dx / mag, y: dy / mag, z: dz / mag };
     }
 
     // Helper: spawn barrel position
@@ -498,7 +583,8 @@ function UpdateCamera(){
         }
         if (!isShooting && wasShootingBefore && currentSlot.chargeStartTime && currentSlot.ammo > 0) {
             // Released — fire homing tracer
-            var cAimDir = getAimDir();
+            var cSpawnForAim = getSpawnPos();
+            var cAimDir = getAimDir(cSpawnForAim);
             var cSpd = currentWeapon.bulletSpeed;
             var cMag = Math.hypot(cAimDir.x, cAimDir.y, cAimDir.z) || 1;
             var cdx = (cAimDir.x / cMag) * cSpd;
@@ -518,7 +604,7 @@ function UpdateCamera(){
                 }
             }
 
-            var cSpawn = getSpawnPos();
+            var cSpawn = cSpawnForAim;
             lastBulletDestroyedPos = null; lastBulletDestroyedReason = null;
             var tracerBullet = {
                 type: "bullet",
@@ -553,14 +639,17 @@ function UpdateCamera(){
 
         var bulletSpeed = currentWeapon.bulletSpeed;
         var rx = Math.cos(camera.angle), ry = -Math.sin(camera.angle);
-        var aimDir = getAimDir();
+
+        // Spawn first: the aim direction is now measured FROM the muzzle to
+        // the crosshair's target point, so it needs the muzzle position.
+        var spawn = getSpawnPos();
+        var spawnX = spawn.x, spawnY = spawn.y, spawnZ = spawn.z;
+
+        var aimDir = getAimDir(spawn);
         var aimDirX = aimDir.x, aimDirY = aimDir.y, aimDirZ = aimDir.z;
 
         var weaponSpread = WeaponConfig.getWeaponSpread(currentSlot.type);
         var spread = isAiming ? weaponSpread.adsSpread : weaponSpread.hipSpread;
-
-        var spawn = getSpawnPos();
-        var spawnX = spawn.x, spawnY = spawn.y, spawnZ = spawn.z;
         lastBulletDestroyedPos = null;
         lastBulletDestroyedReason = null;
 
