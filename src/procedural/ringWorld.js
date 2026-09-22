@@ -51,9 +51,36 @@ var ringWorld = {
     // which makes the intersection iterative instead of one closed-form
     // solve -- the height depends on where you hit, which depends on the
     // height. Two refinements are plenty at this distance.
+    // Tuned 2026-09-22 against the real C21/D21 terrain, by measuring image
+    // churn per 1.5 WU of walking (one step) -- the far side is ~28,000 WU
+    // away, so it should barely move.
+    //
+    //   mip off, no relief   35.4% churn   boiling
+    //   mip 32,  no relief    5.9%
+    //   mip 32,  relief x4    6.2%   <- chosen
+    //   mip 32,  relief x8    3.6%   but colour variety collapses (277 -> 96)
+    //
+    // x4 keeps more distinct colour in the band than the smooth cylinder had
+    // (277 vs 250) while giving a silhouette 2.4x rougher than smooth.
+    //
+    // HONEST LIMIT: the refinement does NOT converge -- 2 vs 3 iterations
+    // still differs by ~17% of the band, because displacing the hit point
+    // lands on unrelated terrain. It is a fixed two-step approximation that
+    // is deterministic and temporally stable, not a solved intersection.
+    // Raising reliefIterations will not improve it.
     relief: true,
     reliefIterations: 2,
-    reliefScale: 1.0,   // raise above 1 to exaggerate distant mountains
+    reliefScale: 4.0,   // raise to exaggerate distant mountains; 8 is the practical max
+
+    // ---- Far-side mip ----
+    // The far side of the loop is ~28,000 WU away, so one screen pixel spans
+    // dozens of heightmap texels. Sampling the full-resolution map picks one
+    // of them essentially at random, and the choice changes every time the
+    // camera moves -- the whole band boils. This is why VoxelMaster averages
+    // each map down to a single LOD value: not for speed, for ANTI-ALIASING.
+    // We keep more detail than a single average by mipping to mipSize^2
+    // cells, which is the smallest stable unit that still shows structure.
+    mipSize: 32,
 
     // ---- computed by initRingWorld() ----
     ringLength: 0, ringRadius: 0, flatRadius: 0, detailDistance: 0, halfWidth: 0,
@@ -82,6 +109,52 @@ function initRingWorld() {
     // The perspective pass only covers flat + detail; RenderRingBackdrop()
     // draws everything beyond, so there is no point marching further.
     camera.distance = ringWorld.flatRadius + ringWorld.detailDistance;
+
+    buildRingMip();
+}
+
+// Averaged colour+height grid used ONLY by the backdrop. Rebuilt whenever the
+// ring is (re)initialised, which includes every map change.
+var ringMip = null;
+
+function buildRingMip() {
+    var N = ringWorld.mipSize | 0;
+    if (N <= 0) { ringMip = null; return; }
+    var m = Terrain.rawMap();
+    var step = (m.width / N) | 0;
+    if (step < 1) { ringMip = null; return; }
+
+    var col = new Uint32Array(N * N);
+    var hgt = new Float32Array(N * N);
+
+    for (var cy = 0; cy < N; cy++) {
+        for (var cx = 0; cx < N; cx++) {
+            var r = 0, g = 0, b = 0, h = 0, n = 0;
+            for (var yy = 0; yy < step; yy++) {
+                var sy = cy * step + yy;
+                for (var xx = 0; xx < step; xx++) {
+                    var sx = cx * step + xx;
+                    var idx = (sy << m.shift) + sx;
+                    var c = m.color[idx];
+                    r += (c) & 0xFF; g += (c >> 8) & 0xFF; b += (c >> 16) & 0xFF;
+                    h += m.altitude[idx];
+                    n++;
+                }
+            }
+            var o = cy * N + cx;
+            col[o] = (0xFF000000 | (((b / n) | 0) << 16) | (((g / n) | 0) << 8) | ((r / n) | 0)) >>> 0;
+            hgt[o] = h / n;
+        }
+    }
+    ringMip = { size: N, cellWU: m.width / N, color: col, height: hgt };
+}
+
+// Mip lookup in world space, wrapping like the heightmap does.
+function ringMipIndex(x, y) {
+    var N = ringMip.size, c = ringMip.cellWU;
+    var cx = Math.floor(x / c) % N; if (cx < 0) cx += N;
+    var cy = Math.floor(y / c) % N; if (cy < 0) cy += N;
+    return cy * N + cx;
 }
 
 // Wrap a Y coordinate into [-ringLength/2, +ringLength/2), centred on zero so
@@ -149,6 +222,12 @@ function RenderRingBackdrop() {
     var reliefIters = ringWorld.relief ? (ringWorld.reliefIterations | 0) : 0;
     var reliefScale = ringWorld.reliefScale;
 
+    // Sampling helpers: the mip when we have one, the raw map otherwise.
+    var mipColor  = ringMip ? function (x, y) { return ringMip.color[ringMipIndex(x, y)]; }
+                            : Terrain.colorAt;
+    var mipHeight = ringMip ? function (x, y) { return ringMip.height[ringMipIndex(x, y)]; }
+                            : Terrain.heightAt;
+
     // Pitched camera basis chosen to AGREE WITH THE TERRAIN PASS. The terrain
     // pass is a shear projection putting the horizon at row camera.horizon and
     // mapping a row to (horizon - row)/focalLength. Picking pitch =
@@ -209,7 +288,7 @@ function RenderRingBackdrop() {
                 // Terrain on the inside of a ring rises toward the axis, so a
                 // taller sample means a SMALLER surface radius. Feed it back
                 // and re-solve.
-                Rq = R - Terrain.heightAt(tx, ty) * reliefScale;
+                Rq = R - mipHeight(tx, ty) * reliefScale;
                 ok = false;
             }
             if (!ok) continue;
@@ -219,7 +298,7 @@ function RenderRingBackdrop() {
             // Single-map spike: sample the real heightmap instead of a LOD
             // average. It is one array index here, so there is nothing to gain
             // from precomputing averages the way VoxelMaster has to.
-            var col = Terrain.colorAt(tx, ty);
+            var col = mipColor(tx, ty);
             if (!col) continue;
 
             for (var yy = y; yy < y + S && yy < sh; yy++) {
