@@ -30,6 +30,11 @@ function spikeStatus() {
         lines.push('   chunks built : ' + ChunkTerrain.stats.generated +
                    '  misses ' + ChunkTerrain.stats.misses);
     }
+    if (typeof WorldGen !== 'undefined' && typeof camera !== 'undefined' && WorldGen.biomeIndexAt) {
+        var _bi = WorldGen.biomeIndexAt(camera.y);
+        lines.push('   biome        : ' + WorldGen.biomeName(_bi) +
+                   '  (' + (_bi + 1) + '/' + WorldGen.biomeCount() + ')');
+    }
     el.textContent = lines.join('\n');
 }
 

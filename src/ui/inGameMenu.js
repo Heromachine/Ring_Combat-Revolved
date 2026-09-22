@@ -227,13 +227,14 @@ var InGameMenu = (function () {
                 var STEP = 4, gw = Math.ceil(cw / STEP), gh = Math.ceil(ch / STEP);
                 for (var gy = 0; gy < gh; gy++) {
                     var wy = view.oy + (gy * STEP / ch) * view.span;
+                    var gBio = (typeof WorldGen !== 'undefined') ? WorldGen.biomeIndexAt(wy) : 0;
                     for (var gx = 0; gx < gw; gx++) {
                         var wx = view.ox + (gx * STEP / cw) * view.span;
                         var h  = (typeof WorldGen !== 'undefined')
                                ? WorldGen.heightAtWorld(wx, wy, 0.5)
                                : Terrain.heightAt(wx, wy);
                         var c  = (typeof WorldGen !== 'undefined')
-                               ? WorldGen.colorForHeight(h)
+                               ? WorldGen.colorForHeightBiome(h, gBio)
                                : Terrain.colorAt(wx, wy);
                         var r = c & 0xFF, g = (c >> 8) & 0xFF, b = (c >> 16) & 0xFF;
                         for (var by = 0; by < STEP; by++) {

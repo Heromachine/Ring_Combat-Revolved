@@ -29,16 +29,19 @@ function Render(){
     // LUT keyed by height rather than a parallel colour array -- 4 bytes per
     // texel saved, same cost to read.
     var _chunks = Terrain.usingChunks();
-    var _lut = _chunks ? ChunkTerrain.colorLUT() : null;
+    // One colour LUT per biome now, not one global LUT -- picked when the
+    // chunk changes (below), never per pixel.
+    var _luts = _chunks ? ChunkTerrain.colorLUTs() : null;
     // Hoisted chunk internals. Calling ChunkTerrain.heightAt() per pixel
     // measured 178 ms/frame against 31 ms for the array path -- the call plus
     // its floor/divide per sample is far too expensive in this loop. Inlined
     // with shifts and masks, plus a one-entry cache because consecutive
     // samples along a scanline almost always land in the same chunk.
-    var _cSlots=null,_cCoords=null,_cLive=null,_cShift=9,_cMask=511,_cDim=8,_cDimMask=7;
-    var _lastCx=0x7fffffff,_lastCy=0x7fffffff,_lastChunk=null;
+    var _cSlots=null,_cCoords=null,_cLive=null,_cBiomes=null,_cShift=9,_cMask=511,_cDim=8,_cDimMask=7;
+    var _lastCx=0x7fffffff,_lastCy=0x7fffffff,_lastChunk=null,_lastLut=null;
     if(_chunks){
         _cSlots=ChunkTerrain.slots(); _cCoords=ChunkTerrain.coords(); _cLive=ChunkTerrain.liveFlags();
+        _cBiomes=ChunkTerrain.biomes();
         _cShift=ChunkTerrain.SHIFT; _cMask=ChunkTerrain.LOCAL_MASK;
         _cDim=ChunkTerrain.RING_DIM; _cDimMask=ChunkTerrain.RING_MASK;
     }
@@ -65,12 +68,19 @@ function Render(){
                 if(_cx!==_lastCx||_cy!==_lastCy){
                     _lastCx=_cx; _lastCy=_cy;
                     var _sl=((_cy&_cDimMask)*_cDim)+(_cx&_cDimMask);
-                    _lastChunk=(_cLive[_sl]&&_cCoords[_sl*2]===_cx&&_cCoords[_sl*2+1]===_cy)
-                        ? _cSlots[_sl] : null;
+                    var _hit=(_cLive[_sl]&&_cCoords[_sl*2]===_cx&&_cCoords[_sl*2+1]===_cy);
+                    _lastChunk=_hit ? _cSlots[_sl] : null;
+                    // Biome (and therefore which LUT) only needs re-picking
+                    // when the chunk changes -- zero added per-pixel cost.
+                    _lastLut=_hit ? _luts[_cBiomes[_sl]] : null;
                 }
                 _alt=_lastChunk ? _lastChunk[((_fy&_cMask)<<_cShift)+(_fx&_cMask)]
                                 : ChunkTerrain.heightAt(plx,ply);
-                _col=_lut[_alt];
+                // Miss (chunk not resident): biome must be looked up directly
+                // since there is no stored chunk to read it from. Misses are
+                // already the expensive path (a full function call above);
+                // one more cheap lookup here does not change that.
+                _col=_lastLut ? _lastLut[_alt] : _luts[WorldGen.biomeIndexAt(ply)][_alt];
             } else {
                 var mapoffset=Terrain.indexAt(plx,ply);
                 _alt=terrainAlt[mapoffset];

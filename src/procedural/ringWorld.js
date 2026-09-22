@@ -174,12 +174,16 @@ function buildRingNoiseLOD() {
 
     for (var j = 0; j < A; j++) {
         var wy = -ringWorld._halfLen + j * dy;
+        // Biome depends only on Y, so it is looked up once per ROW rather
+        // than once per cell -- same reasoning as the render loop's
+        // per-chunk cache, just at LOD grid granularity instead.
+        var bio = (typeof WorldGen.biomeIndexAt === 'function') ? WorldGen.biomeIndexAt(wy) : 0;
         for (var i = 0; i < C; i++) {
             var wx = -ringWorld.halfWidth + i * dx;
             var h = WorldGen.heightAtWorld(wx, wy, 0.5);   // reduced octaves
             var o = j * C + i;
             hgt[o] = h;
-            col[o] = WorldGen.colorForHeight(h);
+            col[o] = WorldGen.colorForHeightBiome(h, bio);
         }
     }
     ringMip = { procedural: true, around: A, across: C, dy: dy, dx: dx,

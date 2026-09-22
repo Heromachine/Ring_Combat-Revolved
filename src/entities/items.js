@@ -65,9 +65,10 @@ function _scatterWorld(type, texture, step, chance, colorCheck, options) {
     let effChance = Math.min(chance, maxCount / Math.max(samples, 1));
 
     for (let wy = cy - half; wy < cy + half; wy += step) {
+        let bio = haveGen ? WorldGen.biomeIndexAt(wy) : 0;
         for (let wx = cx - half; wx < cx + half; wx += step) {
             let h   = haveGen ? WorldGen.heightAtWorld(wx, wy, 1) : Terrain.heightAt(wx, wy);
-            let col = (haveGen ? WorldGen.colorForHeight(h) : Terrain.colorAt(wx, wy)) & 0xFFFFFF;
+            let col = (haveGen ? WorldGen.colorForHeightBiome(h, bio) : Terrain.colorAt(wx, wy)) & 0xFFFFFF;
 
             if (colorCheck(col) && Math.random() < effChance) {
                 items.push({

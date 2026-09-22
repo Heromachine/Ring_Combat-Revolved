@@ -34,16 +34,26 @@ var ChunkTerrain = (function () {
     var _slots   = new Array(DIM * DIM).fill(null);
     var _coords  = new Int32Array(DIM * DIM * 2);
     var _live    = new Uint8Array(DIM * DIM);
+    var _biomes  = new Uint8Array(DIM * DIM);   // one biome id per resident chunk
     var _pending = [];
-    var _colorLUT = null;
+    var _colorLUTs = null;   // array of Uint32Array(256), one per biome
     var _stats   = { generated: 0, lastMs: 0, misses: 0 };
 
     // Colour is DERIVED from height through a 256-entry lookup rather than
-    // stored. That removes 4 bytes per texel -- a 4x memory saving -- and is
-    // as fast as reading a colour array.
-    function _buildColorLUT() {
-        _colorLUT = new Uint32Array(256);
-        for (var h = 0; h < 256; h++) _colorLUT[h] = WorldGen.colorForHeight(h);
+    // stored -- 4 bytes per texel saved, same cost to read. One LUT per
+    // BIOME rather than one global LUT: land colour differs by biome, so a
+    // single table cannot represent it. The chunk's biome is decided ONCE at
+    // generation (its centre position), not per texel -- see _generate --
+    // which is what keeps this a per-CHUNK array lookup rather than a
+    // per-pixel biome computation in the render hot loop.
+    function _buildColorLUTs() {
+        var n = WorldGen.biomeCount();
+        _colorLUTs = [];
+        for (var b = 0; b < n; b++) {
+            var arr = new Uint32Array(256);
+            for (var h = 0; h < 256; h++) arr[h] = WorldGen.colorForHeightBiome(h, b);
+            _colorLUTs.push(arr);
+        }
     }
 
     // Cheap deterministic per-texel detail. Restores roughness the lattice
@@ -85,7 +95,19 @@ var ChunkTerrain = (function () {
 
         _stats.generated++;
         _stats.lastMs = ((typeof performance !== 'undefined') ? performance.now() : Date.now()) - t0;
-        return out;
+
+        // Biome is decided by the CHUNK'S CENTRE, once, not per texel. A
+        // chunk (512 WU) is far smaller than a biome sector (thousands of
+        // WU), so this is right for the vast majority of a chunk's area. The
+        // only place it could be "wrong" is a chunk that straddles a sector
+        // boundary -- but the moat (350 WU either side, see worldGen.js)
+        // forces that whole area to water, and water colour is the same in
+        // every biome's LUT, so a mismatched land-colour choice there is
+        // never actually visible.
+        var bio = (typeof WorldGen !== 'undefined')
+            ? WorldGen.biomeIndexAt(oy + CHUNK / 2) : 0;
+
+        return { height: out, biome: bio };
     }
 
     function _slotOf(cx, cy) { return ((cy & MASK) * DIM) + (cx & MASK); }
@@ -100,11 +122,12 @@ var ChunkTerrain = (function () {
     function ensure(cx, cy) {
         var s = _slotOf(cx, cy);
         if (_live[s] && _coords[s * 2] === cx && _coords[s * 2 + 1] === cy) return _slots[s];
-        var data = _generate(cx, cy);
-        _slots[s] = data;
+        var gen = _generate(cx, cy);
+        _slots[s] = gen.height;
+        _biomes[s] = gen.biome;
         _coords[s * 2] = cx; _coords[s * 2 + 1] = cy;
         _live[s] = 1;
-        return data;
+        return _slots[s];
     }
 
     // Queue the chunks around a position, nearest first. Call once per frame;
@@ -158,15 +181,22 @@ var ChunkTerrain = (function () {
     }
 
     function colorAt(wx, wy) {
-        if (!_colorLUT) _buildColorLUT();
-        return _colorLUT[heightAt(wx, wy)];
+        if (!_colorLUTs) _buildColorLUTs();
+        var h = heightAt(wx, wy);
+        var fx = Math.floor(wx), fy = Math.floor(wy);
+        var cx = Math.floor(fx / CHUNK), cy = Math.floor(fy / CHUNK);
+        var s = _slotOf(cx, cy);
+        var hit = _live[s] && _coords[s * 2] === cx && _coords[s * 2 + 1] === cy;
+        var bio = hit ? _biomes[s] : WorldGen.biomeIndexAt(wy);
+        return _colorLUTs[bio][h];
     }
 
     function reset() {
         _slots = new Array(DIM * DIM).fill(null);
         _live = new Uint8Array(DIM * DIM);
+        _biomes = new Uint8Array(DIM * DIM);
         _pending.length = 0;
-        _colorLUT = null;
+        _colorLUTs = null;
         _stats.generated = 0;
         _stats.misses = 0;
     }
@@ -184,13 +214,14 @@ var ChunkTerrain = (function () {
         slots:          function () { return _slots; },
         coords:         function () { return _coords; },
         liveFlags:      function () { return _live; },
+        biomes:         function () { return _biomes; },
         requestAround:  requestAround,
         pump:           pump,
         ensure:         ensure,
         chunkAt:        chunkAt,
         heightAt:       heightAt,
         colorAt:        colorAt,
-        colorLUT:       function () { if (!_colorLUT) _buildColorLUT(); return _colorLUT; },
+        colorLUTs:      function () { if (!_colorLUTs) _buildColorLUTs(); return _colorLUTs; },
         reset:          reset,
         stats:          _stats,
         residency:      DIM
