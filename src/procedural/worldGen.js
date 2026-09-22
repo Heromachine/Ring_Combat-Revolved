@@ -45,7 +45,24 @@ var WorldGen = (function () {
         // (p1 -0.357, p99 +0.357), so terrain came out with sd 8.4 against
         // the 33.5 measured on the hand-made C21 map. This gain opens it out;
         // about 2% of samples clip, which reads as flat basins and plateaux.
-        contrast:    2.6
+        contrast:    2.6,
+
+        // ---- Rim wall ----
+        // The ring band is finite across X, but until now only the BACKDROP
+        // knew that (ringWorld.js ringInsideWidth). The terrain function was
+        // defined at every X, so walking west simply generated more ground
+        // forever while the ring overhead correctly stopped.
+        //
+        // The band now ends in a wall. It blocks by SLOPE, not by height:
+        // canMoveTo rejects any step steeper than MAX_SLOPE = 2, so a rise of
+        // wallRise over wallRamp gives 130/40 = 3.25, comfortably past it.
+        // Height alone would not be enough, and jumping cannot help -- max
+        // charged jump is about 1 m.
+        bandHalfWidth: 3584,   // set from ringWorld.halfWidth by configure()
+        edgeWall:      true,
+        wallRamp:      40,     // WU over which the wall rises
+        wallRise:      130,    // WU above local terrain at the top
+        wallCap:       250     // chunk heights are Uint8; stay under 255
     };
 
     var _L = 1;   // ring length in WU, set by configure()
@@ -83,7 +100,27 @@ var WorldGen = (function () {
         if (n < -1) n = -1; else if (n > 1) n = 1;
         var h = (n + 1) * 0.5 * cfg.maxHeight;                     // [0, maxHeight]
         if (h < cfg.seaLevel) h = cfg.seaLevel - (cfg.seaLevel - h) * 0.25;  // flatten basins
+
+        // Rim wall: the band has edges, so the ground has to stop being
+        // walkable at them. Smoothstepped so the join reads as terrain
+        // rising into a lip rather than a step.
+        if (cfg.edgeWall) {
+            var ax = Math.abs(x);
+            var inner = cfg.bandHalfWidth - cfg.wallRamp;
+            if (ax > inner) {
+                var t = (ax - inner) / cfg.wallRamp;
+                if (t > 1) t = 1;
+                t = t * t * (3 - 2 * t);
+                h += cfg.wallRise * t;
+                if (h > cfg.wallCap) h = cfg.wallCap;
+            }
+        }
         return h;
+    }
+
+    // True where the player can actually stand -- inside the rim wall.
+    function insideBand(x) {
+        return Math.abs(x) <= cfg.bandHalfWidth - cfg.wallRamp;
     }
 
     // Packed ABGR colour for a height, banded like a heightmap legend.
@@ -107,6 +144,7 @@ var WorldGen = (function () {
 
     return {
         configure:      configure,
+        insideBand:     insideBand,
         heightAtWorld:  heightAtWorld,
         colorForHeight: colorForHeight,
         config:         cfg

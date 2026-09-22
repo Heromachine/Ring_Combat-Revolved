@@ -19,7 +19,7 @@ M.ring = {
     -- Matches the Phase 0 decision (HeroLab 8c6866b6). ringLength is the only
     -- value the server strictly needs -- it is what wraps distance -- but the
     -- rest travel with it so the client cannot configure itself differently.
-    enabled         = false,   -- flip to true when the ring becomes the default world
+    enabled         = true,    -- the ring IS the world; dist2d wraps accordingly
     lengthTiles     = 64,
     widthTiles      = 8,
     tileAdvance     = 896,     -- tileWidth 1024 - overlap 128

@@ -246,6 +246,20 @@ function Init(){
     // default CE;DE is a featureless light-grey arena -- its entire palette
     // is rgb(193,193,192) -- which made the ring impossible to judge and
     // read on screen as "everything is white". Press M to cycle maps.
+    // Bring the procedural world up BEFORE the first frame. Chunk mode is the
+    // default now, so without this the player spawns over terrain that has
+    // not been generated and falls through the LOD fallback.
+    if (typeof initRingWorld === 'function') initRingWorld();
+    if (typeof Terrain !== 'undefined' && Terrain.usingChunks && Terrain.usingChunks()) {
+        ChunkTerrain.reset();
+        ChunkTerrain.requestAround(camera.x, camera.y, camera.distance);
+        ChunkTerrain.pump(25);                       // seed enough to stand on
+        camera.height = getGroundHeight(camera.x, camera.y);
+        camera.velocityY = 0;
+    }
+
+    // Still loaded: N switches back to it, and it is what CELL-space
+    // consumers (the menu's whole-map overview) read.
     LoadMap("C21;D21");
     OnResizeWindow();
     loadGunModel();

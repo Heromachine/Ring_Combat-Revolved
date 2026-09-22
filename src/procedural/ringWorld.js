@@ -28,7 +28,10 @@
 "use strict";
 
 var ringWorld = {
-    enabled: false,
+    // The ring is the world now, not an experiment. relief and the
+    // procedural far side default on with it; O / K / P still toggle each
+    // for comparison.
+    enabled: true,
 
     // ---- Phase 0 decision (HeroLab 8c6866b6), verified numerically ----
     ringLengthTiles:     64,    // 57,344 WU around (~10.9 miles)
@@ -151,7 +154,9 @@ function initRingWorld() {
     camera.distance = ringWorld.flatRadius + ringWorld.detailDistance;
 
     if (ringWorld.procedural && typeof WorldGen !== 'undefined') {
-        WorldGen.configure(ringWorld.ringLength);
+        // The band width has to reach WorldGen, or the rim wall sits at the
+        // wrong X and the walkable area stops matching the ring overhead.
+        WorldGen.configure(ringWorld.ringLength, { bandHalfWidth: ringWorld.halfWidth });
         buildRingNoiseLOD();
     } else {
         buildRingMip();

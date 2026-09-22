@@ -50,9 +50,10 @@ var Terrain = (function () {
     // 43 call sites that read terrain.
     //
     //   'map'    the loaded 1024x1024 heightmap, wrapped bitwise. Repeats
-    //            every 1024 WU. The original behaviour, still the default.
+    //            every 1024 WU. The original behaviour, kept reachable with N.
     //   'chunk'  procedurally generated chunks from WorldGen. Never repeats.
-    var _source = 'map';
+    //            The default: this is the world now.
+    var _source = 'chunk';
 
     function setSource(kind) {
         _source = (kind === 'chunk') ? 'chunk' : 'map';
