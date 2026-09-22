@@ -79,10 +79,16 @@ function pollGamepad(){
     }
     input.prevGpAim = gpAim;
 
-    // Start button - toggle debug UI (edge detection: only on press)
+    // Start button - open the in-game menu, same as Tab on keyboard
+    // (edge detection: only on press). Previously called toggleDebugUI(),
+    // which pops the admin-only controls/debug panel -- unlike its keyboard
+    // equivalent (ESC, keyboard.js case 27), that call had no isAdmin guard,
+    // so any gamepad player could open admin-only UI. toggleDebugUI() is
+    // left defined below in case it is wired to a real admin-gated control
+    // later; it is just no longer reachable from Start.
     var gpStart = isPressed(gamepad.buttons.start);
     if(gpStart && !gamepad.prevStart){
-        toggleDebugUI();
+        if (typeof InGameMenu !== 'undefined') InGameMenu.toggle();
     }
     gamepad.prevStart = gpStart;
 

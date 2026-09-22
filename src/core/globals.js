@@ -262,7 +262,7 @@ var gamepad={
         sprintAlt:0,   // A button (alternative sprint)
         shoot:7,       // RT (Right Trigger as button)
         aim:6,         // LT (Left Trigger as button)
-        start:9,       // Start button - toggle debug UI
+        start:9,       // Start button - opens the in-game menu (same as Tab)
         swapWeapon:3,  // Y button - swap weapons
         pickup:2       // X button - also pickup (context sensitive)
     },
