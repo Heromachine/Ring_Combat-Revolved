@@ -378,6 +378,12 @@ async function beginGame(isAnonymous) {
         console.warn("Multiplayer failed to connect, running offline:", e);
     }
 
+    // Adopt the server's world parameters before anything reads ring
+    // geometry, so client and server agree on where the seam is.
+    if (typeof NakamaClient !== "undefined" && typeof applyServerWorldConfig === "function") {
+        applyServerWorldConfig(await NakamaClient.fetchWorldConfig());
+    }
+
     // Admin check — decided by the SERVER, never by the client.
     // The check_admin RPC pins admin to an immutable Nakama user_id.
     // Fails closed to non-admin if the RPC or session is unavailable.

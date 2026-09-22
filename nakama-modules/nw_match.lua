@@ -4,6 +4,7 @@
 -- ============================================================
 
 local nk = require("nakama")
+local rcr_config = require("rcr.config")
 
 -- ── Shared opcodes (must match multiplayer.js) ────────────────
 local OP_POSITION      = 1
@@ -106,10 +107,10 @@ local function now_ms(tick)
     return math.floor(tick * (1000 / TICK_RATE))
 end
 
+-- Planar distance, RING-AWARE -- see match_handler.lua for why. Same
+-- delegation so both game modes share one definition of the loop.
 local function dist2d(x1, y1, x2, y2)
-    local dx = x1 - x2
-    local dy = y1 - y2
-    return math.sqrt(dx * dx + dy * dy)
+    return rcr_config.dist2d(x1, y1, x2, y2)
 end
 
 local function get_facility(fac_id)

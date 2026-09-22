@@ -4,6 +4,7 @@
 -- ============================================================
 
 local _nk = require("nakama")
+local rcr_config = require("rcr.config")
 
 local OP_POSITION      = 1
 local OP_CHAT          = 2
@@ -69,10 +70,16 @@ local function now_ms(tick)
     return math.floor(tick * (1000 / TICK_RATE))
 end
 
+-- Planar distance, RING-AWARE. Delegates to rcr.config so client and server
+-- cannot disagree about the loop length. Plain Euclidean while the ring is
+-- off, so flat worlds behave exactly as before.
+--
+-- Without the wrap, two players standing next to each other across the seam
+-- measure a full ring-length apart, so hit validation (line ~253), vicinity
+-- chat and shout radar all silently fail in a band that MOVES WITH THE RING.
+-- That reads as flaky netcode, not as a seam bug.
 local function dist2d(x1, y1, x2, y2)
-    local dx = x1 - x2
-    local dy = y1 - y2
-    return math.sqrt(dx * dx + dy * dy)
+    return rcr_config.dist2d(x1, y1, x2, y2)
 end
 
 local function load_player_data(user_id)

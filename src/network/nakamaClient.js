@@ -189,6 +189,29 @@ var NakamaClient = (function () {
         }
     }
 
+    // ── World config (server-authoritative) ─────────────────
+
+    // Asks the server for the world parameters IT is using. The client must
+    // not declare its own ring geometry: the server uses ringLength to decide
+    // whether a shot is in range, so a disagreement rejects hits near the
+    // seam and reads as flaky netcode rather than a config bug. Same trap the
+    // hand-mirrored WEAPONS table already set.
+    //
+    // Returns null when there is no session (single player) or on any error;
+    // callers then keep their local defaults.
+    async function fetchWorldConfig() {
+        if (!_session) return null;
+        try {
+            var result = await getClient().rpc(_session, "rcr_world_config", {});
+            var payload = result && result.payload;
+            if (typeof payload === "string") payload = JSON.parse(payload);
+            return (payload && payload.ring) ? payload.ring : null;
+        } catch (e) {
+            console.warn("rcr_world_config unavailable, keeping local world defaults:", e);
+            return null;
+        }
+    }
+
     // ── Admin status (server-authoritative) ─────────────────
 
     // Asks the server whether THIS session is an admin. The client
@@ -237,6 +260,7 @@ var NakamaClient = (function () {
         readAdminSettings: readAdminSettings,
         writeAdminSettings: writeAdminSettings,
         checkAdmin:        checkAdmin,
+        fetchWorldConfig:  fetchWorldConfig,
         disconnect:        disconnect
     };
 

@@ -107,6 +107,28 @@ var ringWorld = {
 
 var _ringFlatCameraDistance = null;
 
+// Adopt the server's world parameters. The server decides hit range using
+// ringLength, so these must match or shots near the seam are rejected --
+// see nakama-modules/rcr/config.lua. Safe to call with null (single player),
+// in which case the local defaults above stand.
+function applyServerWorldConfig(cfg) {
+    if (!cfg) return false;
+    if (typeof cfg.lengthTiles     === 'number') ringWorld.ringLengthTiles     = cfg.lengthTiles;
+    if (typeof cfg.widthTiles      === 'number') ringWorld.ringWidthTiles      = cfg.widthTiles;
+    if (typeof cfg.tileAdvance     === 'number') ringWorld.tileAdvance         = cfg.tileAdvance;
+    if (typeof cfg.flatRadiusTiles === 'number') ringWorld.flatRadiusTiles     = cfg.flatRadiusTiles;
+    if (typeof cfg.detailTiles     === 'number') ringWorld.detailDistanceTiles = cfg.detailTiles;
+    if (typeof cfg.enabled         === 'boolean') ringWorld.enabled            = cfg.enabled;
+    initRingWorld();
+    if (typeof WorldGen !== 'undefined' && typeof cfg.seed === 'number') {
+        WorldGen.configure(ringWorld.ringLength || (cfg.ringLength || 57344), { seed: cfg.seed });
+    }
+    console.log("World config from server: ring",
+        ringWorld.enabled ? "ON" : "off",
+        Math.round(ringWorld.ringLength).toLocaleString(), "WU around");
+    return true;
+}
+
 function initRingWorld() {
     if (_ringFlatCameraDistance === null) _ringFlatCameraDistance = camera.distance;
 
