@@ -10,6 +10,29 @@
 //   C21 33.5 | C14 31.8 | C15 24.2 | C13 15.1 | C3/C4 have 512x512 height
 //   maps that get upscaled to 1024, so they read softer. CE;DE is last: it
 //   is the flat featureless grey arena, kept only for comparison.
+// PHASE 1 SPIKE: paint the current experimental mode state on screen, so
+// which world you are looking at is never a guess.
+function spikeStatus() {
+    var el = document.getElementById('spike-status');
+    if (!el) return;
+    var chunks = (typeof Terrain !== 'undefined') && Terrain.getSource
+                 && Terrain.getSource() === 'chunk';
+    var ring   = (typeof ringWorld !== 'undefined') && ringWorld.enabled;
+    var lines = [
+        'N  near terrain : ' + (chunks ? 'PROCEDURAL CHUNKS (no repeat)' : 'tiled map (repeats every 1024)'),
+        'O  ring world   : ' + (ring ? 'ON  ' + Math.round(ringWorld.ringLength).toLocaleString() + ' WU around' : 'off (flat)')
+    ];
+    if (ring) {
+        lines.push('P  far side     : ' + (ringWorld.procedural ? 'procedural' : 'tiled mip'));
+        lines.push('K  ring relief  : ' + (ringWorld.relief ? 'on x' + ringWorld.reliefScale : 'off'));
+    }
+    if (chunks && typeof ChunkTerrain !== 'undefined') {
+        lines.push('   chunks built : ' + ChunkTerrain.stats.generated +
+                   '  misses ' + ChunkTerrain.stats.misses);
+    }
+    el.textContent = lines.join('\n');
+}
+
 var _spikeMaps = ["C21;D21", "C14;D14", "C15;D15", "C13;D13", "C3;D3", "C4;D4", "CE;DE"];
 var _spikeMapIndex = 0;
 
@@ -62,6 +85,7 @@ function DetectKeysDown(e){
                 console.log("Near terrain:", _next === 'chunk'
                     ? "PROCEDURAL CHUNKS (never repeats)"
                     : "TILED MAP (repeats every 1024 WU)");
+                spikeStatus();
             }
             break;
         case 80: // P — PHASE 1 SPIKE: procedural far side vs the tiled mip
@@ -71,12 +95,14 @@ function DetectKeysDown(e){
                 console.log("Far side:", ringWorld.procedural
                     ? "PROCEDURAL (ring-extent noise, nothing repeats)"
                     : "TILED MIP (one heightmap repeated 56x)");
+                spikeStatus();
             }
             break;
         case 75: // K — PHASE 1 SPIKE: toggle relief on the outer ring
             if (typeof ringWorld !== 'undefined') {
                 ringWorld.relief = !ringWorld.relief;
                 console.log("Outer-ring relief:", ringWorld.relief ? "ON" : "OFF (smooth cylinder)");
+                spikeStatus();
             }
             break;
         case 77: // M — PHASE 1 SPIKE: cycle terrain maps
@@ -101,6 +127,7 @@ function DetectKeysDown(e){
                         ? "| circumference " + ringWorld.ringLength.toLocaleString() +
                           " WU, radius " + Math.round(ringWorld.ringRadius).toLocaleString()
                         : "");
+                spikeStatus();
             }
             break;
         case 9: // Tab — toggle in-game menu

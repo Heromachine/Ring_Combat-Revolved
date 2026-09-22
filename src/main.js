@@ -160,6 +160,7 @@ function exitGame() {
 }
 
 // Main draw loop
+var _frameCount = 0;
 function Draw(timestamp){
     if (!_loopActive) return;
     updaterunning=true;
@@ -171,6 +172,7 @@ function Draw(timestamp){
         // Keep chunks resident around the player and drip-feed generation.
         // Budget 1 chunk/frame: a chunk costs ~10 ms to build, so generating
         // several in one frame would stall visibly.
+        if (typeof spikeStatus === 'function' && (_frameCount++ & 31) === 0) spikeStatus();
         if (typeof ChunkTerrain !== 'undefined' && Terrain.usingChunks()) {
             ChunkTerrain.requestAround(camera.x, camera.y, camera.distance);
             ChunkTerrain.pump(1);

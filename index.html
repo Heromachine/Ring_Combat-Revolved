@@ -681,6 +681,17 @@
             image-rendering: crisp-edges;
         }
 
+        #spike-status {
+            position: absolute;
+            left: 8px; bottom: 8px;
+            z-index: 120;
+            font: 11px/1.5 ui-monospace, Menlo, Consolas, monospace;
+            color: #9fe0b0;
+            text-shadow: 0 0 3px #000, 0 0 6px #000;
+            pointer-events: none;
+            white-space: pre;
+            opacity: 0.85;
+        }
         #crosshair {
             position: absolute;
             top: 50%;
@@ -1230,6 +1241,9 @@
     <canvas id="fullscreenCanvas" width="800" height="450"></canvas>
 
     <div id="crosshair"></div>
+    <!-- PHASE 1 SPIKE: shows which experimental modes are live. Remove with
+         the spike. -->
+    <div id="spike-status"></div>
     <div id="shieldbar">
         <div id="shieldinner"></div>
     </div>
@@ -1347,7 +1361,7 @@
 <!-- ===================================== -->
 <!-- src/ files - Input                   -->
 <!-- ===================================== -->
-<script src="src/input/keyboard.js?v=7"></script>
+<script src="src/input/keyboard.js?v=8"></script>
 <script src="src/input/mouse.js?v=2"></script>
 <script src="src/input/gamepad.js"></script>
 <script src="src/input/touch.js"></script>
@@ -1365,7 +1379,7 @@
 <!-- ===================================== -->
 <!-- src/ files - Main Entry Point        -->
 <!-- ===================================== -->
-<script src="src/main.js?v=9"></script>
+<script src="src/main.js?v=10"></script>
 
 <!-- ── Splash screen dismiss ── -->
 <script>
