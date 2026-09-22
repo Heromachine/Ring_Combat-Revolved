@@ -117,6 +117,29 @@ function DrawMinimap() {
         }
     }
 
+    // ---- Buildings (small in radar range; sectors are thousands of WU
+    // apart, so this mostly fires when close). Drawn directly in the
+    // ambient rotated frame, same as remote players/radar reveals above --
+    // NOT counter-rotated. A counter-rotate here would cancel the rotation
+    // that gives the icon its correct BEARING on the radar, not just its
+    // own orientation; a square tilting as the player turns is a
+    // non-issue (nothing else on this radar stays upright either, only
+    // the player triangle and N-badge, which are drawn outside this
+    // rotated block entirely).
+    if (typeof buildings !== 'undefined' && buildings.length) {
+        for (var bdi = 0; bdi < buildings.length; bdi++) {
+            var bd = buildings[bdi];
+            var bdx = (bd.x - camera.x) * scale;
+            var bdy = (bd.y - camera.y) * scale;
+            if (Math.abs(bdx) > range * scale + 10 || Math.abs(bdy) > range * scale + 10) continue;
+            ctx.fillStyle = '#c9a86a';
+            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+            ctx.lineWidth = 1;
+            ctx.fillRect(bdx - 4, bdy - 4, 8, 8);
+            ctx.strokeRect(bdx - 4, bdy - 4, 8, 8);
+        }
+    }
+
     ctx.restore();  // removes clip + undoes translate/rotate
 
     // ---- Player icon: white triangle always pointing UP ----
@@ -325,6 +348,23 @@ function DrawDebugMinimap() {
                     ctx.lineWidth = 1.5;
                     ctx.stroke();
                 }
+            }
+        }
+    }
+
+    // Buildings (one per biome; no rotation in this debug view, same
+    // pcx/pcy offset pattern as the remote-player dots above)
+    if (typeof buildings !== 'undefined' && buildings.length) {
+        for (var bdi2 = 0; bdi2 < buildings.length; bdi2++) {
+            var bd2 = buildings[bdi2];
+            var bdx2 = (bd2.x - camera.x) * scale;
+            var bdy2 = (bd2.y - camera.y) * scale;
+            if (Math.abs(bdx2) < size / 2 && Math.abs(bdy2) < size / 2) {
+                ctx.fillStyle = '#c9a86a';
+                ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+                ctx.lineWidth = 1;
+                ctx.fillRect(pcx + bdx2 - 4, pcy + bdy2 - 4, 8, 8);
+                ctx.strokeRect(pcx + bdx2 - 4, pcy + bdy2 - 4, 8, 8);
             }
         }
     }

@@ -359,6 +359,39 @@ var InGameMenu = (function () {
             });
         }
 
+        // ── Buildings (one per biome; empty array in tiled-map mode, so
+        // this is naturally a no-op there) ────────────────────
+        if (typeof buildings !== 'undefined' && buildings.length) {
+            buildings.forEach(function (b) {
+                var bx = _wx2cx(b.x), by = _wy2cy(b.y);
+                if (bx < -20 || bx > cw + 20 || by < -20 || by > ch + 20) return;
+
+                // Small roofed-square icon so it reads as a structure, not
+                // an NPC dot or a player marker.
+                var hs = 5;
+                ctx.fillStyle = '#c9a86a';
+                ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+                ctx.lineWidth = 1;
+                ctx.fillRect(bx - hs, by - hs, hs * 2, hs * 2);
+                ctx.strokeRect(bx - hs, by - hs, hs * 2, hs * 2);
+                ctx.beginPath();
+                ctx.moveTo(bx - hs - 2, by - hs);
+                ctx.lineTo(bx,          by - hs - 6);
+                ctx.lineTo(bx + hs + 2, by - hs);
+                ctx.closePath();
+                ctx.fillStyle = '#8a6d3b';
+                ctx.fill();
+                ctx.stroke();
+
+                var name = (typeof WorldGen !== 'undefined') ? WorldGen.biomeName(b.biome) : 'Building';
+                ctx.font = '9px monospace';
+                ctx.fillStyle = '#e8d8b0';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(name, bx + hs + 4, by);
+            });
+        }
+
         // ── Cardinal direction labels ────────────────────────
         ctx.save();
         ctx.font = 'bold 11px monospace';
