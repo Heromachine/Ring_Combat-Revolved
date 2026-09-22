@@ -168,6 +168,13 @@ function Draw(timestamp){
         pollGamepad();
         if (typeof updateTouchInput === 'function') updateTouchInput();
         UpdateCamera();
+        // Keep chunks resident around the player and drip-feed generation.
+        // Budget 1 chunk/frame: a chunk costs ~10 ms to build, so generating
+        // several in one frame would stall visibly.
+        if (typeof ChunkTerrain !== 'undefined' && Terrain.usingChunks()) {
+            ChunkTerrain.requestAround(camera.x, camera.y, camera.distance);
+            ChunkTerrain.pump(1);
+        }
         updateTargetMetrics();
         updateGreenCubeFloat(timestamp);
         updateShadowCubeFloat(timestamp);

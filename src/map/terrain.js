@@ -44,15 +44,35 @@ var Terrain = (function () {
              +  (Math.floor(worldX) & (map.width  - 1));
     }
 
+    // ── Source selection ─────────────────────────────────────
+    // Two backings, chosen here and nowhere else. This is the whole reason
+    // the seam exists: swapping the world's SHAPE touches this file, not the
+    // 43 call sites that read terrain.
+    //
+    //   'map'    the loaded 1024x1024 heightmap, wrapped bitwise. Repeats
+    //            every 1024 WU. The original behaviour, still the default.
+    //   'chunk'  procedurally generated chunks from WorldGen. Never repeats.
+    var _source = 'map';
+
+    function setSource(kind) {
+        _source = (kind === 'chunk') ? 'chunk' : 'map';
+    }
+    function getSource() { return _source; }
+    function usingChunks() {
+        return _source === 'chunk' && typeof ChunkTerrain !== 'undefined';
+    }
+
     // ── WORLD space ──────────────────────────────────────────
 
     // Raw terrain height, without the player height offset.
     function heightAt(worldX, worldY) {
+        if (usingChunks()) return ChunkTerrain.heightAt(worldX, worldY);
         return map.altitude[indexAt(worldX, worldY)];
     }
 
     // Packed ABGR colour of the terrain surface.
     function colorAt(worldX, worldY) {
+        if (usingChunks()) return ChunkTerrain.colorAt(worldX, worldY);
         return map.color[indexAt(worldX, worldY)];
     }
 
@@ -92,6 +112,9 @@ var Terrain = (function () {
     function rawMap() { return map; }
 
     return {
+        setSource:    setSource,
+        getSource:    getSource,
+        usingChunks:  usingChunks,
         indexAt:      indexAt,
         heightAt:     heightAt,
         colorAt:      colorAt,

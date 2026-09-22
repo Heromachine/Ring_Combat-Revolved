@@ -46,6 +46,24 @@ function DetectKeysDown(e){
             var ctrl=document.getElementById('controls');
             ctrl.style.display=ctrl.style.display==='none'?'block':'none';
             break;
+        case 78: // N — PHASE 3/4: near terrain source, chunks vs the tiled map
+            if (typeof Terrain !== 'undefined') {
+                var _next = Terrain.getSource() === 'chunk' ? 'map' : 'chunk';
+                if (_next === 'chunk' && typeof WorldGen !== 'undefined') {
+                    WorldGen.configure(
+                        (typeof ringWorld !== 'undefined' && ringWorld.ringLength)
+                            ? ringWorld.ringLength : 57344);
+                    ChunkTerrain.reset();
+                    ChunkTerrain.requestAround(camera.x, camera.y, camera.distance);
+                    ChunkTerrain.pump(9);   // seed enough to stand on
+                }
+                Terrain.setSource(_next);
+                camera.height = Math.max(camera.height, getGroundHeight(camera.x, camera.y));
+                console.log("Near terrain:", _next === 'chunk'
+                    ? "PROCEDURAL CHUNKS (never repeats)"
+                    : "TILED MAP (repeats every 1024 WU)");
+            }
+            break;
         case 80: // P — PHASE 1 SPIKE: procedural far side vs the tiled mip
             if (typeof ringWorld !== 'undefined') {
                 ringWorld.procedural = !ringWorld.procedural;

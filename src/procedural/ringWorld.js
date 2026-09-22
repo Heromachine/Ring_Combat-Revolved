@@ -39,7 +39,12 @@ var ringWorld = {
     // Leaving VoxelMaster's 4 here would reach 158 deg instead of 177 and
     // leave a visible GAP at the zenith where the ring should close.
     flatRadiusTiles:     0.5,
-    detailDistanceTiles: 4,     // absolute render-quality budget, not a ring fraction
+    // Sized to fit inside ChunkTerrain's residency: the ring of 8x8 chunk
+    // slots reaches 3 chunks (1,536 WU) from the player, and any sample
+    // beyond that misses. flatRadius 448 + 1,075 = 1,523 WU of perspective
+    // pass, with the procedural backdrop covering everything past it.
+    // This also roughly halves the march the terrain pass performs.
+    detailDistanceTiles: 1.2,
 
     tileAdvance: 896,           // VoxelMaster's tileWidth(1024) - overlapSize(128)
 

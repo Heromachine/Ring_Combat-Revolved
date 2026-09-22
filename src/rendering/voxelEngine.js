@@ -24,6 +24,25 @@ function Render(){
     // changes shape when the world becomes tiled.
     var _m=Terrain.rawMap(), terrainAlt=_m.altitude, terrainCol=_m.color;
 
+    // Two terrain backings. The branch is hoisted per frame and is perfectly
+    // predictable inside the loop. In chunk mode colour comes from a 256-entry
+    // LUT keyed by height rather than a parallel colour array -- 4 bytes per
+    // texel saved, same cost to read.
+    var _chunks = Terrain.usingChunks();
+    var _lut = _chunks ? ChunkTerrain.colorLUT() : null;
+    // Hoisted chunk internals. Calling ChunkTerrain.heightAt() per pixel
+    // measured 178 ms/frame against 31 ms for the array path -- the call plus
+    // its floor/divide per sample is far too expensive in this loop. Inlined
+    // with shifts and masks, plus a one-entry cache because consecutive
+    // samples along a scanline almost always land in the same chunk.
+    var _cSlots=null,_cCoords=null,_cLive=null,_cShift=9,_cMask=511,_cDim=8,_cDimMask=7;
+    var _lastCx=0x7fffffff,_lastCy=0x7fffffff,_lastChunk=null;
+    if(_chunks){
+        _cSlots=ChunkTerrain.slots(); _cCoords=ChunkTerrain.coords(); _cLive=ChunkTerrain.liveFlags();
+        _cShift=ChunkTerrain.SHIFT; _cMask=ChunkTerrain.LOCAL_MASK;
+        _cDim=ChunkTerrain.RING_DIM; _cDimMask=ChunkTerrain.RING_MASK;
+    }
+
     // Ring bend, hoisted per frame. The maths is inlined into the sample loop
     // below rather than calling ringApply() per pixel -- that loop runs
     // millions of times a frame and a call per sample is not affordable.
@@ -39,8 +58,24 @@ function Render(){
         var plx=-cosang*z-sinang*z,ply=sinang*z-cosang*z,prx=cosang*z-sinang*z,pry=-sinang*z-cosang*z,dx=(prx-plx)/sw,dy=(pry-ply)/sw;
         plx+=camera.x;ply+=camera.y;var invz = camera.focalLength / z;
         for(var i=0;i<sw;i++){
-            var mapoffset=Terrain.indexAt(plx,ply);
-            var _alt=terrainAlt[mapoffset];
+            var _alt, _col;
+            if(_chunks){
+                var _fx=Math.floor(plx), _fy=Math.floor(ply);
+                var _cx=_fx>>_cShift, _cy=_fy>>_cShift;
+                if(_cx!==_lastCx||_cy!==_lastCy){
+                    _lastCx=_cx; _lastCy=_cy;
+                    var _sl=((_cy&_cDimMask)*_cDim)+(_cx&_cDimMask);
+                    _lastChunk=(_cLive[_sl]&&_cCoords[_sl*2]===_cx&&_cCoords[_sl*2+1]===_cy)
+                        ? _cSlots[_sl] : null;
+                }
+                _alt=_lastChunk ? _lastChunk[((_fy&_cMask)<<_cShift)+(_fx&_cMask)]
+                                : ChunkTerrain.heightAt(plx,ply);
+                _col=_lut[_alt];
+            } else {
+                var mapoffset=Terrain.indexAt(plx,ply);
+                _alt=terrainAlt[mapoffset];
+                _col=terrainCol[mapoffset];
+            }
             if(_ringOn){
                 // wrapped arc distance from the camera along the loop
                 var _s=((((ply-_camY)+_rHalf)%_rL)+_rL)%_rL-_rHalf;
@@ -51,7 +86,7 @@ function Render(){
             if(heightonscreen<hiddeny[i]){
                 for(var k=heightonscreen|0;k<hiddeny[i];k++){
                     var idx=k*sw+i;
-                    if(z<depth[idx]){screendata.buf32[idx]=terrainCol[mapoffset];depth[idx]=z;}
+                    if(z<depth[idx]){screendata.buf32[idx]=_col;depth[idx]=z;}
                 }
                 hiddeny[i]=heightonscreen;
             }
