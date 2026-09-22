@@ -226,9 +226,23 @@ function UpdateCamera(){
         camera.y += (ny - camera.y) * slopeMult;
     }
 
+    // ---- RING: close the loop ----
+    // This single line is what makes the ring WALKABLE rather than a visual
+    // effect. Walk far enough along Y and you arrive back where you started.
+    // Terrain lookups stay correct because ringLength is an exact multiple of
+    // the heightmap's 1024 wrap (57,344 = 56 x 1024).
+    if (typeof ringWorld !== 'undefined' && ringWorld.enabled) {
+        camera.y = ringWrapY(camera.y);
+    }
+
     // Advance sprite sheet animation based on movement distance
     var spDx = camera.x - playerSprite.lastX;
     var spDy = camera.y - playerSprite.lastY;
+    // Crossing the seam makes the raw delta a full ring-length. Measure the
+    // wrapped delta instead, or the walk animation lurches once per lap.
+    if (typeof ringWorld !== 'undefined' && ringWorld.enabled) {
+        spDy = ringWrapY(spDy);
+    }
     var distMoved = Math.sqrt(spDx * spDx + spDy * spDy);
     if (distMoved > 0.01) {
         playerSprite.distAccum += distMoved;

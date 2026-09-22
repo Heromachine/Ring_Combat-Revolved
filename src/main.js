@@ -177,6 +177,10 @@ function Draw(timestamp){
         RenderGreenCube();
         RenderShadowCube();
         Render();
+        // Draws the far side of the loop arcing overhead. Must run AFTER
+        // Render(), which fills hiddeny[] -- the backdrop uses it to avoid
+        // painting over near terrain. No-op while the ring is off.
+        if (typeof RenderRingBackdrop === 'function') RenderRingBackdrop();
         var playerSprites = [];
         var _now = Date.now();
         var _myId = (typeof NakamaClient !== "undefined") ? NakamaClient.getUserId() : null;

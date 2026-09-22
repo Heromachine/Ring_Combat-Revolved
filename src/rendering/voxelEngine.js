@@ -24,13 +24,30 @@ function Render(){
     // changes shape when the world becomes tiled.
     var _m=Terrain.rawMap(), terrainAlt=_m.altitude, terrainCol=_m.color;
 
+    // Ring bend, hoisted per frame. The maths is inlined into the sample loop
+    // below rather than calling ringApply() per pixel -- that loop runs
+    // millions of times a frame and a call per sample is not affordable.
+    var _ringOn = (typeof ringWorld !== 'undefined') && ringWorld.enabled;
+    var _rR=0,_rInvR=0,_rFlat=0,_rL=0,_rHalf=0,_camY=camera.y;
+    if(_ringOn){
+        _rR=ringWorld.ringRadius; _rInvR=ringWorld._invR; _rFlat=ringWorld.flatRadius;
+        _rL=ringWorld.ringLength; _rHalf=ringWorld._halfLen;
+    }
+
     hiddeny.fill(sh);
     for(var z=1;z<camera.distance;z+=deltaz){
         var plx=-cosang*z-sinang*z,ply=sinang*z-cosang*z,prx=cosang*z-sinang*z,pry=-sinang*z-cosang*z,dx=(prx-plx)/sw,dy=(pry-ply)/sw;
         plx+=camera.x;ply+=camera.y;var invz = camera.focalLength / z;
         for(var i=0;i<sw;i++){
             var mapoffset=Terrain.indexAt(plx,ply);
-            var heightonscreen=(camera.height-terrainAlt[mapoffset])*invz+camera.horizon;
+            var _alt=terrainAlt[mapoffset];
+            if(_ringOn){
+                // wrapped arc distance from the camera along the loop
+                var _s=((((ply-_camY)+_rHalf)%_rL)+_rL)%_rL-_rHalf;
+                if(_s<0)_s=-_s;
+                if(_s>_rFlat)_alt+=_rR*(1-Math.cos((_s-_rFlat)*_rInvR));
+            }
+            var heightonscreen=(camera.height-_alt)*invz+camera.horizon;
             if(heightonscreen<hiddeny[i]){
                 for(var k=heightonscreen|0;k<hiddeny[i];k++){
                     var idx=k*sw+i;

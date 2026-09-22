@@ -36,6 +36,18 @@ function DetectKeysDown(e){
             var ctrl=document.getElementById('controls');
             ctrl.style.display=ctrl.style.display==='none'?'block':'none';
             break;
+        case 79: // O — PHASE 1 SPIKE: toggle ring world on/off
+            if (typeof ringWorld !== 'undefined') {
+                ringWorld.enabled = !ringWorld.enabled;
+                initRingWorld();
+                if (ringWorld.enabled) camera.y = ringWrapY(camera.y);
+                console.log("Ring world:", ringWorld.enabled ? "ON" : "OFF",
+                    ringWorld.enabled
+                        ? "| circumference " + ringWorld.ringLength.toLocaleString() +
+                          " WU, radius " + Math.round(ringWorld.ringRadius).toLocaleString()
+                        : "");
+            }
+            break;
         case 9: // Tab — toggle in-game menu
             e.preventDefault();
             if (!e.repeat && typeof InGameMenu !== 'undefined') InGameMenu.toggle();
