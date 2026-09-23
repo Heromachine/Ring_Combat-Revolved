@@ -31,9 +31,13 @@ var DayNight = (function () {
 
     var SUN_ELEVATION_DEG = 45;
     var CYCLE_MS           = 24 * 60 * 1000;  // 24 min, full lap of the loop
-    var NIGHT_FLOOR         = 0.05;            // near-black, not literal 0 (avoids a
-                                                // dead-black band reading as a rendering
-                                                // glitch rather than "very dark")
+    var NIGHT_FLOOR         = 0;               // pitch black at the darkest point, per
+                                                // explicit user request (0.05 read as
+                                                // "still very blue" -- the sky fill
+                                                // wasn't darkening at all, see
+                                                // screenBuffer.js's DrawBackground(),
+                                                // but the floor itself is now literal 0
+                                                // too rather than a compromise value)
     var EPOCH_INTERVAL_MS   = 15000;           // how often lit LUTs may rebuild
 
     var _theta    = SUN_ELEVATION_DEG * Math.PI / 180;
