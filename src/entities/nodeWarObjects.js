@@ -24,6 +24,11 @@ var NW_COLOR_CLAN1    = packColor(70,  140, 230);   // blue
 var NW_COLOR_CLAN2    = packColor(220, 90,  70);    // red
 var NW_COLOR_MAINFRAME_OFF = packColor(120, 120, 130);
 var NW_COLOR_MAINFRAME_ON  = packColor(250, 210, 60);
+var NW_COLOR_KEY = packColor(255, 215, 0);   // matches the HUD/map's #ffd700 gold
+
+var NW_KEY_SIZE   = 16;   // cube edge, world units -- small, a hand-carried prop
+var NW_KEY_HOVER  = 40;   // rest height above ground, world units
+var NW_KEY_BOB     = 6;    // bob amplitude, world units
 
 function _nwColorForNode(node) {
     if (node.status === 'active') {
@@ -52,6 +57,27 @@ function _drawFacilityCube(cx, cy, size, colour) {
     _drawBuildingQuad({x:cx-h,y:cy+h,z:baseZ},{x:cx-h,y:cy-h,z:baseZ},{x:cx-h,y:cy-h,z:topZ},{x:cx-h,y:cy+h,z:topZ}, 0.85, tex, rep, rep);
     _drawBuildingQuad({x:cx-h,y:cy+h,z:topZ},{x:cx+h,y:cy+h,z:topZ},{x:cx+h,y:cy-h,z:topZ},{x:cx-h,y:cy-h,z:topZ}, 0.95, tex, rep, rep);
     return topZ;
+}
+
+// The dropped Key -- a small gold cube hovering and bobbing above wherever
+// it landed (key.groundPos), visible from any angle since nothing else is
+// around it to occlude the underside the way a facility's roof/walls do.
+// Rendered only while nobody is holding it; nodeWarHud.js's HUD line and
+// both maps' gold markers already cover the "someone is carrying it" case.
+function _drawKeyPickup(cx, cy) {
+    var baseZ = getRawTerrainHeight(cx, cy) + NW_KEY_HOVER + Math.sin(Date.now() * 0.003) * NW_KEY_BOB;
+    var topZ  = baseZ + NW_KEY_SIZE;
+    var h = NW_KEY_SIZE / 2;
+    var tex = solidTex(NW_COLOR_KEY);
+
+    _drawBuildingQuad({x:cx-h,y:cy-h,z:baseZ},{x:cx+h,y:cy-h,z:baseZ},{x:cx+h,y:cy-h,z:topZ},{x:cx-h,y:cy-h,z:topZ}, 0.75, tex, 1, 1);
+    _drawBuildingQuad({x:cx+h,y:cy+h,z:baseZ},{x:cx-h,y:cy+h,z:baseZ},{x:cx-h,y:cy+h,z:topZ},{x:cx+h,y:cy+h,z:topZ}, 0.75, tex, 1, 1);
+    _drawBuildingQuad({x:cx+h,y:cy-h,z:baseZ},{x:cx+h,y:cy+h,z:baseZ},{x:cx+h,y:cy+h,z:topZ},{x:cx+h,y:cy-h,z:topZ}, 0.85, tex, 1, 1);
+    _drawBuildingQuad({x:cx-h,y:cy+h,z:baseZ},{x:cx-h,y:cy-h,z:baseZ},{x:cx-h,y:cy-h,z:topZ},{x:cx-h,y:cy+h,z:topZ}, 0.85, tex, 1, 1);
+    _drawBuildingQuad({x:cx-h,y:cy+h,z:topZ},{x:cx+h,y:cy+h,z:topZ},{x:cx+h,y:cy-h,z:topZ},{x:cx-h,y:cy-h,z:topZ}, 0.95, tex, 1, 1);
+    // Bottom face too, unlike the facility cube -- this floats in open air
+    // and gets walked under/around, so the underside really is seen.
+    _drawBuildingQuad({x:cx-h,y:cy-h,z:baseZ},{x:cx+h,y:cy-h,z:baseZ},{x:cx+h,y:cy+h,z:baseZ},{x:cx-h,y:cy+h,z:baseZ}, 0.6, tex, 1, 1);
 }
 
 // NPC placeholder -- a flat billboard sprite (same rendering technique
@@ -133,4 +159,8 @@ function RenderNodeWarObjects() {
     }
 
     _drawMainframePyramid(0, 0);
+
+    if (nakamaState.nw.key && nakamaState.nw.key.groundPos) {
+        _drawKeyPickup(nakamaState.nw.key.groundPos.x, nakamaState.nw.key.groundPos.y);
+    }
 }

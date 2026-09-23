@@ -30,6 +30,10 @@ var NW_ACTIVATION_MS = 3000 + 200;
 // then refuse.
 var NW_INTERACT_RANGE_SQ = 55 * 55;
 
+// Matches KEY_PICKUP_RANGE (40 WU) in nw_match.lua, same safety-margin
+// reasoning as NW_INTERACT_RANGE_SQ above.
+var NW_KEY_PICKUP_RANGE_SQ = 35 * 35;
+
 var NW_CLAN_TO_FACTION = { iron_ravens: 'clan1', ember_tide: 'clan2', silent_root: 'clan2' };
 
 var NodeWarInteract = (function () {
@@ -72,6 +76,16 @@ var NodeWarInteract = (function () {
             return { action: 'deactivate', text: 'Deactivate this Node?' };
         }
         return null;
+    }
+
+    // The server's own check (nw_match.lua's NW_KEY_PICKUP_REQUEST handler)
+    // is just "is it on the ground and in range" -- no faction restriction,
+    // matching the design doc: any faction, including guests, can pick up
+    // a dropped Key.
+    function _eligibleForKey() {
+        var key = nakamaState.nw.key;
+        if (!key || !key.groundPos) return null;
+        return { action: 'pickup', text: 'Pick up the Key?' };
     }
 
     function _eligibleForMainframe() {
@@ -120,6 +134,19 @@ var NodeWarInteract = (function () {
             if (mfElig) best = { kind: 'mainframe', id: null, action: mfElig.action, text: mfElig.text };
         }
 
+        // Key pickup has its own, tighter range (matching the server's
+        // KEY_PICKUP_RANGE) -- capped independently of bestDistSq's current
+        // value so a key just outside pickup range but inside a node's
+        // wider activation range can't wrongly win the "nearest" comparison.
+        var keyElig = _eligibleForKey();
+        if (keyElig) {
+            var keyDistSq = _distSq(nakamaState.nw.key.groundPos.x, nakamaState.nw.key.groundPos.y);
+            if (keyDistSq <= NW_KEY_PICKUP_RANGE_SQ && keyDistSq <= bestDistSq) {
+                best = { kind: 'key', id: null, action: keyElig.action, text: keyElig.text };
+                bestDistSq = keyDistSq;
+            }
+        }
+
         if (best) {
             _targetKind = best.kind; _targetId = best.id; _pendingAction = best.action;
             _setPrompt(best.text);
@@ -137,6 +164,8 @@ var NodeWarInteract = (function () {
         if (!textEl || !box) return;
         var elig = _targetKind === 'node'
             ? _eligibleForNode(nakamaState.nw.nodes.find(function (n) { return n.facilityId === _targetId; }))
+            : _targetKind === 'key'
+            ? _eligibleForKey()
             : _eligibleForMainframe();
         if (!elig) { _mode = 'idle'; return; }   // state changed between prompt and keypress
         textEl.textContent = elig.text;
@@ -156,6 +185,17 @@ var NodeWarInteract = (function () {
         if (_mode !== 'confirming' || !_targetKind) return;
         var box = document.getElementById('nw-confirm');
         if (box) box.style.display = 'none';
+
+        if (_targetKind === 'key') {
+            // Pickup is a single instant request/response server-side (see
+            // nw_match.lua's NW_KEY_PICKUP_REQUEST handler) -- unlike node/
+            // Mainframe activation there is no START/COMPLETE pair, so no
+            // channel, no movement lock, no progress bar; just send it and
+            // go straight back to idle.
+            Multiplayer.nwKeyPickupRequest(nakamaState.nw.key && nakamaState.nw.key.groundPos);
+            _mode = 'idle';
+            return;
+        }
 
         if (_targetKind === 'node') {
             if (_pendingAction === 'activate') Multiplayer.nwNodeActivateStart(_targetId);
