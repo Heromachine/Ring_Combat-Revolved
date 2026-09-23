@@ -59,7 +59,7 @@ function pollGamepad(){
     var gpJump = isPressed(gamepad.buttons.jump);
     var gpCrouch = isPressed(gamepad.buttons.crouch);
     var gpReload = isPressed(gamepad.buttons.reload);
-    var gpSprint = isPressed(gamepad.buttons.sprint) || isPressed(gamepad.buttons.sprintAlt);
+    var gpSprint = isPressed(gamepad.buttons.sprint);
     var gpShoot = isPressed(gamepad.buttons.shoot);
     var gpAim = isPressed(gamepad.buttons.aim);
 
@@ -100,20 +100,29 @@ function pollGamepad(){
     // X button for pickup when near a weapon
     input.gpPickupWeapon = isPressed(gamepad.buttons.pickup);
 
-    // B button - "activate": same action as the keyboard F key (talk to an
-    // NPC's quest dialog, or open a Node War node/Mainframe confirm prompt).
-    // Dispatched as a real synthetic keydown rather than calling into
+    // A button - "activate"/"accept": same action as the keyboard F key
+    // (talk to an NPC's quest dialog, open a Node War node/Mainframe
+    // confirm prompt, advance/accept a quest dialog line).
+    // B button - "cancel": same action as the keyboard Escape key (close
+    // an open quest dialog or Node War confirm prompt).
+    // Both dispatched as real synthetic keydowns rather than calling into
     // QuestManager/NodeWarInteract directly -- both already listen for
-    // KeyF on document and hold all the relevant state (open dialog,
-    // current prompt target, etc.) in private closures with no public
-    // method for "press F" to call instead. This guarantees B always does
-    // exactly what F does, including any future change to either module,
-    // with nothing to keep in sync by hand.
+    // KeyF/Escape on document and hold all the relevant state (open
+    // dialog, current prompt target, etc.) in private closures with no
+    // public "press F"/"press Escape" method to call instead. This
+    // guarantees A/B always do exactly what F/Escape do, including any
+    // future change to either module, with nothing to keep in sync by hand.
     var gpActivate = isPressed(gamepad.buttons.activate);
     if(gpActivate && !gamepad.prevActivate){
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF' }));
     }
     gamepad.prevActivate = gpActivate;
+
+    var gpCancel = isPressed(gamepad.buttons.cancel);
+    if(gpCancel && !gamepad.prevCancel){
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }));
+    }
+    gamepad.prevCancel = gpCancel;
 }
 
 function toggleDebugUI(){

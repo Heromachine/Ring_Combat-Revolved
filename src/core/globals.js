@@ -254,14 +254,15 @@ var gamepad={
     prevJump:false,
     prevStart:false,
     prevActivate:false,
+    prevCancel:false,
     // Standard gamepad mapping (Xbox-style, works with most controllers)
     buttons:{
         jump:4,        // LB (Left Bumper) - hold to charge, release to jump
         crouch:11,     // Right Stick Click (R3)
-        activate:1,    // B - same as keyboard F (talk to NPC / Node War activate)
+        activate:0,    // A - same as keyboard F (talk to NPC / Node War activate / accept)
+        cancel:1,      // B - same as keyboard Escape (close dialog / cancel)
         reload:2,      // X
         sprint:10,     // Left Stick Click
-        sprintAlt:0,   // A button (alternative sprint)
         shoot:7,       // RT (Right Trigger as button)
         aim:6,         // LT (Left Trigger as button)
         start:9,       // Start button - opens the in-game menu (same as Tab)
