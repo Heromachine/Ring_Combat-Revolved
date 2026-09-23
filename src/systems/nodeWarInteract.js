@@ -179,6 +179,14 @@ var NodeWarInteract = (function () {
         var box = document.getElementById('nw-confirm');
         if (box) box.style.display = 'none';
         _mode = 'idle';
+        // Also clear the stale target, not just the mode: update() returns
+        // right after a leash-triggered auto-close (_tickConfirming) without
+        // falling through to _scanProximity() in that same tick, so without
+        // this a keydown landing in the gap between that frame and the next
+        // could re-open a confirm for a target that's no longer valid (e.g.
+        // a node array index, or a key that's already gone) instead of
+        // just doing nothing until the next scan picks a real target.
+        _targetKind = null; _targetId = null; _pendingAction = null;
     }
 
     function _onAccept() {
@@ -257,11 +265,28 @@ var NodeWarInteract = (function () {
         }
     }
 
+    // While the confirm dialog is open, walking too far away closes it
+    // automatically -- the same behaviour QuestManager's NPC dialog already
+    // has (its DIALOG_LEASH_SQ check). There is no dedicated Cancel button
+    // for the same reason quest dialogs don't have one either: walking away
+    // (or Escape) is the dismissal, not a click.
+    function _tickConfirming() {
+        var pos = _targetKind === 'node'
+            ? nakamaState.nw.nodes.find(function (n) { return n.facilityId === _targetId; })
+            : _targetKind === 'key'
+            ? (nakamaState.nw.key && nakamaState.nw.key.groundPos)
+            : { x: 0, y: 0 };
+        var rangeSq = (_targetKind === 'key' ? NW_KEY_PICKUP_RANGE_SQ : NW_INTERACT_RANGE_SQ) * 1.4;
+        if (player.health <= 0 || !pos || _distSq(pos.x, pos.y) > rangeSq) {
+            _closeConfirm();
+        }
+    }
+
     function update() {
         if (gameMode !== 'nodewar' || typeof nakamaState === 'undefined' || !nakamaState.nw) return;
 
         if (_mode === 'active') { _tickChannel(); return; }
-        if (_mode === 'confirming') return;   // waiting on Accept/Cancel click
+        if (_mode === 'confirming') { _tickConfirming(); return; }
         _scanProximity();
     }
 
@@ -270,9 +295,7 @@ var NodeWarInteract = (function () {
         _bound = true;
 
         var acceptBtn = document.getElementById('nw-confirm-accept');
-        var cancelBtn = document.getElementById('nw-confirm-cancel');
         if (acceptBtn) acceptBtn.addEventListener('click', _onAccept);
-        if (cancelBtn) cancelBtn.addEventListener('click', _closeConfirm);
 
         document.addEventListener('keydown', function (e) {
             if (e.repeat) return;
