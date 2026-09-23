@@ -123,6 +123,13 @@ function pollGamepad(){
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }));
     }
     gamepad.prevCancel = gpCancel;
+
+    // RB - toggle flashlight, same as keyboard L.
+    var gpFlashlight = isPressed(gamepad.buttons.flashlight);
+    if(gpFlashlight && !gamepad.prevFlashlight){
+        if (typeof ToggleFlashlight === 'function') ToggleFlashlight();
+    }
+    gamepad.prevFlashlight = gpFlashlight;
 }
 
 function toggleDebugUI(){

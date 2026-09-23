@@ -214,6 +214,7 @@ function Draw(timestamp){
         }
         var npcSprites = (typeof NodeWarNpcSprites === 'function') ? NodeWarNpcSprites() : [];
         RenderItems(playerSprites.concat(enemySprites).concat(npcSprites));
+        if (typeof RenderFlashlight === 'function') RenderFlashlight();
         Flip();
         RenderTestTarget();
         if (!Multiplayer.isConnected()) DrawEnemyBars(screendata.context);

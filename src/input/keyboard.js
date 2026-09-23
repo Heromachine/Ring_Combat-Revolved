@@ -54,6 +54,9 @@ function DetectKeysDown(e){
         case 81:input.swapWeapon=true;break;
         case 69:input.pickupWeapon=true;break;
         case 70:input.interact=true;break;  // F — interact / talk to NPC
+        case 76: // L — toggle flashlight
+            if (!e.repeat && typeof ToggleFlashlight === 'function') ToggleFlashlight();
+            break;
         case 90: // Z - cycle zoom presets (admin only)
             if(!isAdmin) break;
             var zoomPresets=[20,50,100,200,300];

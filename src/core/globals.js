@@ -255,6 +255,7 @@ var gamepad={
     prevStart:false,
     prevActivate:false,
     prevCancel:false,
+    prevFlashlight:false,
     // Standard gamepad mapping (Xbox-style, works with most controllers)
     buttons:{
         jump:4,        // LB (Left Bumper) - hold to charge, release to jump
@@ -267,7 +268,8 @@ var gamepad={
         aim:6,         // LT (Left Trigger as button)
         start:9,       // Start button - opens the in-game menu (same as Tab)
         swapWeapon:3,  // Y button - swap weapons
-        pickup:2       // X button - also pickup (context sensitive)
+        pickup:2,      // X button - also pickup (context sensitive)
+        flashlight:5   // RB (Right Bumper) - same as keyboard L
     },
     axes:{
         moveX:0,       // Left Stick X

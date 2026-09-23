@@ -1416,7 +1416,7 @@
 <div id="playerrotation"></div>
 <div id="playerposition"></div>
 <div id="bulletcount"></div>
-<div id="info">Keyboard: WASD move, Mouse look, LMB shoot, RMB toggle ADS, HOLD Space jump, Shift sprint, C crouch, R reload, Q swap weapon, E pickup | Gamepad: Left Stick move, Right Stick look, RT shoot, LT toggle ADS, HOLD LB jump, R3 crouch, A activate/accept, B cancel, X reload, Y swap weapon, L3 sprint</div>
+<div id="info">Keyboard: WASD move, Mouse look, LMB shoot, RMB toggle ADS, HOLD Space jump, Shift sprint, C crouch, R reload, Q swap weapon, E pickup, L flashlight | Gamepad: Left Stick move, Right Stick look, RT shoot, LT toggle ADS, HOLD LB jump, R3 crouch, A activate/accept, B cancel, X reload, Y swap weapon, L3 sprint, RB flashlight</div>
 
 <!-- ===================================== -->
 <!-- Nakama JS SDK                        -->
@@ -1450,7 +1450,7 @@
 <!-- src/ files - Core Foundation         -->
 <!-- ===================================== -->
 <script src="src/core/polyfills.js"></script>
-<script src="src/core/globals.js?v=5"></script>
+<script src="src/core/globals.js?v=6"></script>
 <script src="src/core/configLoader.js"></script>
 
 <!-- ===================================== -->
@@ -1477,6 +1477,7 @@
 <script src="src/entities/enemy.js"></script>
 <script src="src/entities/greenCube.js"></script>
 <script src="src/entities/shadowCube.js"></script>
+<script src="src/entities/flashlight.js?v=1"></script>
 <script src="src/indoor/buildingRenderer.js?v=2"></script>
 <script src="src/indoor/buildingPlacer.js?v=1"></script>
 <script src="src/entities/nodeWarObjects.js?v=3"></script>
@@ -1510,9 +1511,9 @@
 <!-- ===================================== -->
 <!-- src/ files - Input                   -->
 <!-- ===================================== -->
-<script src="src/input/keyboard.js?v=10"></script>
+<script src="src/input/keyboard.js?v=11"></script>
 <script src="src/input/mouse.js?v=2"></script>
-<script src="src/input/gamepad.js?v=3"></script>
+<script src="src/input/gamepad.js?v=4"></script>
 <script src="src/input/touch.js"></script>
 
 <!-- ===================================== -->
@@ -1528,7 +1529,7 @@
 <!-- ===================================== -->
 <!-- src/ files - Main Entry Point        -->
 <!-- ===================================== -->
-<script src="src/main.js?v=18"></script>
+<script src="src/main.js?v=19"></script>
 
 <!-- ── Splash screen dismiss ── -->
 <script>
