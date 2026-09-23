@@ -44,7 +44,8 @@ function RenderItems(extraItems){
         sinYaw = Math.sin(camera.angle),
         cosYaw = Math.cos(camera.angle),
         rx = cosYaw, ry = -sinYaw,
-        focal = camera.focalLength;
+        focal = camera.focalLength,
+        albedo = (typeof albedoBuffer === 'function') ? albedoBuffer() : null;
 
     // Project items using ground-plane distance (consistent with terrain rendering)
     var allItems = extraItems ? items.concat(extraItems) : items;
@@ -187,6 +188,7 @@ function RenderItems(extraItems){
                 var r = pixels[srcIdx];
                 var g = pixels[srcIdx + 1];
                 var b = pixels[srcIdx + 2];
+                if (albedo) albedo[bufIdx] = (0xFF000000 | (b << 16) | (g << 8) | r) >>> 0;
                 if (_itemLight !== 1) {
                     r = (r * _itemLight) | 0;
                     g = (g * _itemLight) | 0;

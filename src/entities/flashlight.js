@@ -12,13 +12,15 @@
 // of information that already exists, for the cost of one more read per
 // pixel touched, not a second raycast.
 //
-// ADDITIVE, NOT MULTIPLICATIVE, ON PURPOSE: the day/night system can make a
-// pixel literally (0,0,0) at full night (see dayNightCycle.js). Multiplying
-// an already-black pixel by any boost factor is still exactly black --
-// 0 * anything is 0 -- so a flashlight that just scaled existing colour up
-// would be invisible on the one kind of terrain a flashlight actually
-// matters for. Blending toward a light colour instead works on any input,
-// including pure black.
+// REVEALS TRUE COLOUR: at full night a pixel is literally (0,0,0), so
+// nothing about buf32 alone says what the surface looks like -- scaling it
+// stays black, and blending toward a fixed light colour (the first version
+// of this file) just paints a flat beige disc. Instead each lit renderer
+// records the pixel's UNLIT colour in screendata.albedo (see
+// screenBuffer.js albedoBuffer()), and the beam blends the lit pixel back
+// toward that, slightly warm-tinted. It never darkens anything (per
+// channel it only moves up), so in daylight -- where lit already equals
+// unlit -- it is effectively a no-op, like a real flashlight at noon.
 "use strict";
 
 var flashlightOn = false;
@@ -28,12 +30,11 @@ var FLASHLIGHT_RADIUS_FRAC   = 0.42;   // cone radius, as a fraction of screen h
                                         // for roughly a 20% increase over the ORIGINAL 0.35
                                         // instead, so 0.35 * 1.2 = 0.42.
 var FLASHLIGHT_MAX_WORLD_DIST = 700;   // world units -- no effect at all beyond this
-var FLASHLIGHT_MAX_BOOST      = 0.6;   // caps how far toward the light colour ANY pixel can
-                                        // blend, even dead centre at point-blank range -- the
-                                        // original 1.0 ceiling let the centre blend all the way
-                                        // to the light colour itself, which read as blown-out
-                                        // white rather than a lit surface
-var FLASHLIGHT_COLOR = { r: 255, g: 235, b: 190 };  // warm white
+var FLASHLIGHT_MAX_BOOST      = 1.0;   // centre, point-blank: the surface's full true colour.
+                                        // (Was 0.6 while the beam blended toward a flat light
+                                        // colour and could white out; blending toward the
+                                        // surface's own colour can't exceed it, so no cap needed.)
+var FLASHLIGHT_COLOR = { r: 255, g: 235, b: 190 };  // warm tint applied to the revealed colour
 
 function ToggleFlashlight() {
     flashlightOn = !flashlightOn;
@@ -44,6 +45,7 @@ function RenderFlashlight() {
 
     var sw = screendata.canvas.width, sh = screendata.canvas.height;
     var buf32 = screendata.buf32, depth = screendata.depthBuffer;
+    var albedo = (screendata.albedo && screendata.albedo.length === buf32.length) ? screendata.albedo : null;
     var cx = sw / 2, cy = sh / 2;   // the crosshair is CSS-pinned to 50%/50%
     var R = sh * FLASHLIGHT_RADIUS_FRAC;
     var R2 = R * R;
@@ -78,9 +80,15 @@ function RenderFlashlight() {
 
             var c = buf32[idx];
             var r = c & 0xFF, g = (c >>> 8) & 0xFF, b = (c >>> 16) & 0xFF;
-            r = r + (lr - r) * boost;
-            g = g + (lg - g) * boost;
-            b = b + (lb - b) * boost;
+            // Unlit colour if a renderer recorded one; alpha 0 = none (e.g.
+            // unlit Node War cubes), in which case the lit pixel IS the
+            // true colour already.
+            var a = albedo ? albedo[idx] : 0;
+            if (!(a >>> 24)) a = c;
+            var tr = (a & 0xFF) * lr / 255, tg = ((a >>> 8) & 0xFF) * lg / 255, tb = ((a >>> 16) & 0xFF) * lb / 255;
+            if (tr > r) r = r + (tr - r) * boost;
+            if (tg > g) g = g + (tg - g) * boost;
+            if (tb > b) b = b + (tb - b) * boost;
             buf32[idx] = (0xFF000000 | ((b | 0) << 16) | ((g | 0) << 8) | (r | 0)) >>> 0;
         }
     }

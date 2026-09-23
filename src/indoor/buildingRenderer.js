@@ -73,9 +73,18 @@ function solidTex(abgr) { return { loaded: true, solid: abgr }; }
 
 // Identical rasteriser to cubeRenderer.js's triangle fill, parameterised by
 // texture so walls/floor/ceiling can each sample their own.
+// Day/night factor for whatever is being drawn right now, kept separate
+// from `shade` so the rasteriser can record the UNLIT colour for the
+// flashlight (screenBuffer.js albedoBuffer) before darkening it.
+// _renderOneBuilding sets it per building; everything else (Node War
+// objects etc.) draws at the default 1, i.e. unlit, same as before.
+var _bldNightFactor = 1;
+
 function _drawBuildingTri(p0, p1, p2, shade, tex) {
     var sw = screendata.canvas.width, sh = screendata.canvas.height,
-        buf = screendata.buf32, dep = screendata.depthBuffer;
+        buf = screendata.buf32, dep = screendata.depthBuffer,
+        alb = (typeof albedoBuffer === 'function') ? albedoBuffer() : null,
+        nf = _bldNightFactor;
 
     var mnX = Math.max(0, Math.floor(Math.min(p0.x, p1.x, p2.x)));
     var mxX = Math.min(sw-1, Math.ceil(Math.max(p0.x, p1.x, p2.x)));
@@ -114,6 +123,8 @@ function _drawBuildingTri(p0, p1, p2, shade, tex) {
             var r = Math.min(255, ((tc)&0xFF)*shade|0);
             var g = Math.min(255, ((tc>>8)&0xFF)*shade|0);
             var b = Math.min(255, ((tc>>16)&0xFF)*shade|0);
+            if (alb) alb[bi] = (0xFF000000 | (b<<16) | (g<<8) | r) >>> 0;
+            if (nf !== 1) { r = r*nf|0; g = g*nf|0; b = b*nf|0; }
             buf[bi] = 0xFF000000 | (b<<16) | (g<<8) | r;
             dep[bi] = pd;
         }
@@ -167,21 +178,20 @@ function _renderOneBuilding(cfg) {
     var wTex = cfg._wallTex, cTex = cfg._ceilingTex, fTex = cfg._floorTex;
 
     // Day/night: computed ONCE per building (not per quad, not per pixel)
-    // from the building's own world Y, then folded into every shade value
-    // below -- shade is already just a per-pixel multiplier the rasteriser
-    // applies (_drawBuildingTri's `tc_channel * shade`), so this needs no
-    // change to the rasteriser itself. Buildings previously never
-    // darkened at all, regardless of time of day.
-    var nightFactor = (typeof DayNight !== 'undefined') ? DayNight.intensityAtY(cfg.y) : 1;
+    // from the building's own world Y. Set as _bldNightFactor rather than
+    // folded into shade so _drawBuildingTri can record the unlit colour for
+    // the flashlight before darkening; reset to 1 at the end of this
+    // function so nothing else drawn through this rasteriser inherits it.
+    _bldNightFactor = (typeof DayNight !== 'undefined') ? DayNight.intensityAtY(cfg.y) : 1;
 
     function hWall(wy,ax,bx,shade){var len=bx-ax; if(len<=0)return;
-        _drawBuildingQuad({x:ax,y:wy,z:baseZ},{x:bx,y:wy,z:baseZ},{x:bx,y:wy,z:topZ},{x:ax,y:wy,z:topZ},shade*nightFactor,wTex,len/wH,1);}
+        _drawBuildingQuad({x:ax,y:wy,z:baseZ},{x:bx,y:wy,z:baseZ},{x:bx,y:wy,z:topZ},{x:ax,y:wy,z:topZ},shade,wTex,len/wH,1);}
     function hHeader(wy,ax,bx,fromZ,shade){var len=bx-ax,hh=topZ-fromZ; if(len<=0||hh<=0)return;
-        _drawBuildingQuad({x:ax,y:wy,z:fromZ},{x:bx,y:wy,z:fromZ},{x:bx,y:wy,z:topZ},{x:ax,y:wy,z:topZ},shade*nightFactor,wTex,len/wH,hh/wH);}
+        _drawBuildingQuad({x:ax,y:wy,z:fromZ},{x:bx,y:wy,z:fromZ},{x:bx,y:wy,z:topZ},{x:ax,y:wy,z:topZ},shade,wTex,len/wH,hh/wH);}
     function vWall(wx,ay,by,shade){var len=by-ay; if(len<=0)return;
-        _drawBuildingQuad({x:wx,y:ay,z:baseZ},{x:wx,y:by,z:baseZ},{x:wx,y:by,z:topZ},{x:wx,y:ay,z:topZ},shade*nightFactor,wTex,len/wH,1);}
+        _drawBuildingQuad({x:wx,y:ay,z:baseZ},{x:wx,y:by,z:baseZ},{x:wx,y:by,z:topZ},{x:wx,y:ay,z:topZ},shade,wTex,len/wH,1);}
     function vHeader(wx,ay,by,fromZ,shade){var len=by-ay,hh=topZ-fromZ; if(len<=0||hh<=0)return;
-        _drawBuildingQuad({x:wx,y:ay,z:fromZ},{x:wx,y:by,z:fromZ},{x:wx,y:by,z:topZ},{x:wx,y:ay,z:topZ},shade*nightFactor,wTex,len/wH,hh/wH);}
+        _drawBuildingQuad({x:wx,y:ay,z:fromZ},{x:wx,y:by,z:fromZ},{x:wx,y:by,z:topZ},{x:wx,y:ay,z:topZ},shade,wTex,len/wH,hh/wH);}
 
     hWall(oy1, ox1, ox2, 0.65);       // north
     vWall(ox2, oy1, oy2, 0.80);       // east
@@ -207,8 +217,9 @@ function _renderOneBuilding(cfg) {
     }
 
     var rU = cfg.width/64, rV2 = cfg.depth/64;
-    _drawBuildingQuad({x:ox1,y:oy1,z:baseZ},{x:ox2,y:oy1,z:baseZ},{x:ox2,y:oy2,z:baseZ},{x:ox1,y:oy2,z:baseZ}, 0.90*nightFactor, fTex, rU, rV2);
-    _drawBuildingQuad({x:ox1,y:oy2,z:topZ},{x:ox2,y:oy2,z:topZ},{x:ox2,y:oy1,z:topZ},{x:ox1,y:oy1,z:topZ}, 0.85*nightFactor, cTex, rU, rV2);
+    _drawBuildingQuad({x:ox1,y:oy1,z:baseZ},{x:ox2,y:oy1,z:baseZ},{x:ox2,y:oy2,z:baseZ},{x:ox1,y:oy2,z:baseZ}, 0.90, fTex, rU, rV2);
+    _drawBuildingQuad({x:ox1,y:oy2,z:topZ},{x:ox2,y:oy2,z:topZ},{x:ox2,y:oy1,z:topZ},{x:ox1,y:oy1,z:topZ}, 0.85, cTex, rU, rV2);
+    _bldNightFactor = 1;
 }
 
 // Called each frame from main.js, once, for ALL registered buildings.

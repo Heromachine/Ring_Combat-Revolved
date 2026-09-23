@@ -304,6 +304,7 @@ function RenderRingBackdrop() {
     var ownedArc = ringWorld.flatRadius + ringWorld.detailDistance;
 
     var S = 2;   // sample in SxS blocks, same as Ringscape
+    var albedo = (typeof albedoBuffer === 'function') ? albedoBuffer() : null;
 
     var reliefIters = ringWorld.relief ? (ringWorld.reliefIterations | 0) : 0;
     var reliefScale = ringWorld.reliefScale;
@@ -404,6 +405,7 @@ function RenderRingBackdrop() {
             // ty is this sample's actual world Y around the loop, which is
             // exactly what "looking up at the far side" needs -- it lights
             // by where that arc IS, not by the viewer's own position.
+            var rawCol = col;   // unlit, for the flashlight (screenBuffer.js albedoBuffer)
             if (typeof DayNight !== 'undefined') col = DayNight.litColor(col, ty);
 
             for (var yy = y; yy < y + S && yy < sh; yy++) {
@@ -416,6 +418,7 @@ function RenderRingBackdrop() {
                     // were being overwritten.
                     if (yy < hiddeny[xx] && t < depth[di]) {
                         buf[di] = col;
+                        if (albedo) albedo[di] = rawCol;
                         depth[di] = t;
                     }
                 }
