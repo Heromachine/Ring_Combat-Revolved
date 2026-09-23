@@ -23,8 +23,13 @@
 
 var flashlightOn = false;
 
-var FLASHLIGHT_RADIUS_FRAC   = 0.35;   // cone radius, as a fraction of screen height
+var FLASHLIGHT_RADIUS_FRAC   = 0.70;   // cone radius, as a fraction of screen height (doubled -- less concentrated)
 var FLASHLIGHT_MAX_WORLD_DIST = 700;   // world units -- no effect at all beyond this
+var FLASHLIGHT_MAX_BOOST      = 0.6;   // caps how far toward the light colour ANY pixel can
+                                        // blend, even dead centre at point-blank range -- the
+                                        // original 1.0 ceiling let the centre blend all the way
+                                        // to the light colour itself, which read as blown-out
+                                        // white rather than a lit surface
 var FLASHLIGHT_COLOR = { r: 255, g: 235, b: 190 };  // warm white
 
 function ToggleFlashlight() {
@@ -59,9 +64,14 @@ function RenderFlashlight() {
             var z = depth[idx];
             if (!(z < FLASHLIGHT_MAX_WORLD_DIST)) continue;   // sky (Infinity) or out of range
 
+            // Linear, not squared -- a squared falloff stays near full
+            // strength for most of the radius and then drops sharply near
+            // the edge, which reads as a small hot, concentrated spot even
+            // at a large radius. Linear spreads the brightening gradually
+            // across the whole cone instead.
             var screenFalloff = 1 - Math.sqrt(d2) / R;        // 1 at centre, 0 at the cone's edge
             var distFalloff    = 1 - z / FLASHLIGHT_MAX_WORLD_DIST;  // 1 close, 0 at max range
-            var boost = screenFalloff * screenFalloff * distFalloff; // 0..1, squared for a tighter hot spot
+            var boost = screenFalloff * distFalloff * FLASHLIGHT_MAX_BOOST; // 0..FLASHLIGHT_MAX_BOOST
 
             var c = buf32[idx];
             var r = c & 0xFF, g = (c >>> 8) & 0xFF, b = (c >>> 16) & 0xFF;
