@@ -29,9 +29,11 @@ function Render(){
     // LUT keyed by height rather than a parallel colour array -- 4 bytes per
     // texel saved, same cost to read.
     var _chunks = Terrain.usingChunks();
-    // One colour LUT per biome now, not one global LUT -- picked when the
-    // chunk changes (below), never per pixel.
-    var _luts = _chunks ? ChunkTerrain.colorLUTs() : null;
+    // One colour LUT per biome, further split into day/night-lit variants
+    // by ChunkTerrain.litLUT() (see chunkTerrain.js) -- still picked when
+    // the chunk changes (below), never per pixel. litLUT() degrades to the
+    // plain unlit LUT when the ring/DayNight aren't active, so this stays
+    // correct outside ring mode too.
     // Hoisted chunk internals. Calling ChunkTerrain.heightAt() per pixel
     // measured 178 ms/frame against 31 ms for the array path -- the call plus
     // its floor/divide per sample is far too expensive in this loop. Inlined
@@ -72,7 +74,12 @@ function Render(){
                     _lastChunk=_hit ? _cSlots[_sl] : null;
                     // Biome (and therefore which LUT) only needs re-picking
                     // when the chunk changes -- zero added per-pixel cost.
-                    _lastLut=_hit ? _luts[_cBiomes[_sl]] : null;
+                    // litLUT() itself is a cache lookup keyed by (biome,
+                    // chunk-Y), not a 256-entry rebuild, EXCEPT the first
+                    // time a given chunk-Y is seen after DayNight.epoch()
+                    // ticks (at most every 15s) -- still only paid here,
+                    // never inside the per-pixel path below.
+                    _lastLut=_hit ? ChunkTerrain.litLUT(_cBiomes[_sl], _cy<<_cShift) : null;
                 }
                 _alt=_lastChunk ? _lastChunk[((_fy&_cMask)<<_cShift)+(_fx&_cMask)]
                                 : ChunkTerrain.heightAt(plx,ply);
@@ -80,7 +87,7 @@ function Render(){
                 // since there is no stored chunk to read it from. Misses are
                 // already the expensive path (a full function call above);
                 // one more cheap lookup here does not change that.
-                _col=_lastLut ? _lastLut[_alt] : _luts[WorldGen.biomeIndexAt(ply)][_alt];
+                _col=_lastLut ? _lastLut[_alt] : ChunkTerrain.litLUT(WorldGen.biomeIndexAt(ply), ply)[_alt];
             } else {
                 var mapoffset=Terrain.indexAt(plx,ply);
                 _alt=terrainAlt[mapoffset];

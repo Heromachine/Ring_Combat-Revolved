@@ -386,6 +386,16 @@ function RenderRingBackdrop() {
             // from precomputing averages the way VoxelMaster has to.
             var col = mipColor(tx, ty);
             if (!col) continue;
+            // Day/night lighting, applied HERE rather than inside mipColor/
+            // colorAt: this loop already samples at a reduced SxS block rate
+            // (not per pixel), the ring mip (when active) is a static
+            // precompute that must never have a lighting snapshot baked into
+            // it, and colorAt() is deliberately left unlit so callers that
+            // fall through to it don't get double-lit by their own caller.
+            // ty is this sample's actual world Y around the loop, which is
+            // exactly what "looking up at the far side" needs -- it lights
+            // by where that arc IS, not by the viewer's own position.
+            if (typeof DayNight !== 'undefined') col = DayNight.litColor(col, ty);
 
             for (var yy = y; yy < y + S && yy < sh; yy++) {
                 var row = yy * sw;

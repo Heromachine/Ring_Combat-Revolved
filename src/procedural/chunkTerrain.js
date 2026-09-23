@@ -37,6 +37,13 @@ var ChunkTerrain = (function () {
     var _biomes  = new Uint8Array(DIM * DIM);   // one biome id per resident chunk
     var _pending = [];
     var _colorLUTs = null;   // array of Uint32Array(256), one per biome
+    // Day/night lit variants of _colorLUTs, keyed [biome][chunkY wrapped to
+    // the loop] -- see litLUT() below. Rebuilt lazily per entry, wholesale
+    // invalidated when DayNight.epoch() advances (at most every 15s -- see
+    // dayNightCycle.js), never per frame and never inside the render hot
+    // loop's per-pixel path.
+    var _litLUTs   = null;
+    var _litEpoch  = -1;
     var _stats   = { generated: 0, lastMs: 0, misses: 0 };
 
     // Colour is DERIVED from height through a 256-entry lookup rather than
@@ -54,6 +61,38 @@ var ChunkTerrain = (function () {
             for (var h = 0; h < 256; h++) arr[h] = WorldGen.colorForHeightBiome(h, b);
             _colorLUTs.push(arr);
         }
+    }
+
+    // A day/night-lit variant of _colorLUTs[biome], darkened for whichever
+    // point on the loop worldY falls in. Cached per (biome, chunk-Y wrapped
+    // to the loop) so repeat lookups for the same chunk cost one array
+    // index, not 256 multiplies -- the render hot loop only calls this from
+    // its already-hoisted "chunk changed" branch (see voxelEngine.js), never
+    // per pixel. The whole cache is dropped (not rebuilt) when
+    // DayNight.epoch() ticks, so entries are regenerated lazily as chunks
+    // are actually revisited rather than all at once.
+    function litLUT(biome, worldY) {
+        if (!_colorLUTs) _buildColorLUTs();
+        if (typeof DayNight === 'undefined') return _colorLUTs[biome];
+
+        var ep = DayNight.epoch();
+        if (ep !== _litEpoch) { _litLUTs = null; _litEpoch = ep; }
+        if (!_litLUTs) _litLUTs = [];
+        if (!_litLUTs[biome]) _litLUTs[biome] = [];
+
+        var ringChunks = Math.max(1, Math.round((typeof ringWorld !== 'undefined' ? ringWorld.ringLength : 0) / CHUNK));
+        var cy = Math.floor(worldY / CHUNK);
+        var cyWrapped = ((cy % ringChunks) + ringChunks) % ringChunks;
+
+        var cached = _litLUTs[biome][cyWrapped];
+        if (cached) return cached;
+
+        var base = _colorLUTs[biome];
+        var intensity = DayNight.intensityAtY(cyWrapped * CHUNK + CHUNK / 2);
+        var out = new Uint32Array(256);
+        for (var h = 0; h < 256; h++) out[h] = DayNight.scaleColor(base[h], intensity);
+        _litLUTs[biome][cyWrapped] = out;
+        return out;
     }
 
     // Cheap deterministic per-texel detail. Restores roughness the lattice
@@ -220,6 +259,13 @@ var ChunkTerrain = (function () {
         return ch[ly * CHUNK + lx];
     }
 
+    // Deliberately UNLIT (raw _colorLUTs, not litLUT()) -- callers that want
+    // day/night lighting apply DayNight.litColor()/litLUT() explicitly at
+    // their own sample point (voxelEngine.js's hot loop, ringWorld.js's
+    // backdrop). Keeping this one raw avoids double-lighting wherever a
+    // caller falls back to colorAt() from a path that will light it itself,
+    // and avoids ever baking a lighting snapshot into anything cached longer
+    // than DayNight's own epoch (a precomputed ring mip, for instance).
     function colorAt(wx, wy) {
         if (!_colorLUTs) _buildColorLUTs();
         var h = heightAt(wx, wy);
@@ -235,6 +281,8 @@ var ChunkTerrain = (function () {
         _slots = new Array(DIM * DIM).fill(null);
         _live = new Uint8Array(DIM * DIM);
         _biomes = new Uint8Array(DIM * DIM);
+        _litLUTs = null;
+        _litEpoch = -1;
         _pending.length = 0;
         _colorLUTs = null;
         _stats.generated = 0;
@@ -262,6 +310,7 @@ var ChunkTerrain = (function () {
         heightAt:       heightAt,
         colorAt:        colorAt,
         colorLUTs:      function () { if (!_colorLUTs) _buildColorLUTs(); return _colorLUTs; },
+        litLUT:         litLUT,
         reset:          reset,
         stats:          _stats,
         residency:      DIM
