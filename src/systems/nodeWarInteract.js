@@ -234,6 +234,12 @@ var NodeWarInteract = (function () {
         nwActivationLocked = false;
         var bar = document.getElementById('nw-activation-bar');
         if (bar) bar.style.display = 'none';
+        // Same reasoning as _closeConfirm(): update() returns right after
+        // this without falling through to a fresh _scanProximity() in the
+        // same tick, so a keydown landing in that gap could otherwise
+        // reopen a confirm for a target that just finished or was
+        // abandoned (e.g. a node that's no longer neutral).
+        _targetKind = null; _targetId = null; _pendingAction = null;
     }
 
     function _tickChannel() {
@@ -302,6 +308,12 @@ var NodeWarInteract = (function () {
             if (gameMode !== 'nodewar') return;
             if (e.key === 'f' || e.key === 'F') {
                 if (_mode === 'idle' && _targetKind) { e.preventDefault(); _openConfirm(); }
+                // F/A doubles as Accept once the dialog is already open --
+                // matches QuestManager's own F handling (open, then advance/
+                // accept on the next press) and is the only way a gamepad
+                // (A dispatches this same synthetic KeyF) can ever accept,
+                // since the on-screen Accept button is mouse-only.
+                else if (_mode === 'confirming') { e.preventDefault(); _onAccept(); }
             } else if (e.key === 'Escape') {
                 if (_mode === 'confirming') { e.preventDefault(); _closeConfirm(); }
             }
