@@ -217,7 +217,8 @@ function Draw(timestamp){
                     return { type: 'enemy', x: e.x, y: e.y, z: e.z + e.hitRadius, image: e.texture };
                 });
         }
-        RenderItems(playerSprites.concat(enemySprites));
+        var npcSprites = (typeof NodeWarNpcSprites === 'function') ? NodeWarNpcSprites() : [];
+        RenderItems(playerSprites.concat(enemySprites).concat(npcSprites));
         Flip();
         RenderTestTarget();
         if (!Multiplayer.isConnected()) DrawEnemyBars(screendata.context);
@@ -226,6 +227,7 @@ function Draw(timestamp){
         RenderSniperScope();
         DrawMinimap();
         if (typeof DrawNodeWarHud === 'function') DrawNodeWarHud();
+        if (typeof UpdateNwKeySlot === 'function') UpdateNwKeySlot();
         DrawWeaponUI(screendata.context);
         // In portrait mode draw controls on the separate controls canvas; otherwise on game canvas
         if (touchControls.controlsCtx) {

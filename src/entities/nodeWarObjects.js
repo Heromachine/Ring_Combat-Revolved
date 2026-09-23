@@ -22,9 +22,6 @@ var NW_MAINFRAME_HEIGHT = 90;
 var NW_COLOR_NEUTRAL  = packColor(140, 140, 150);   // grey
 var NW_COLOR_CLAN1    = packColor(70,  140, 230);   // blue
 var NW_COLOR_CLAN2    = packColor(220, 90,  70);    // red
-var NW_COLOR_NPC_BEACON = packColor(240, 210, 80);  // gold -- marks an
-                                                     // interactable (NPC-
-                                                     // bearing) facility
 var NW_COLOR_MAINFRAME_OFF = packColor(120, 120, 130);
 var NW_COLOR_MAINFRAME_ON  = packColor(250, 210, 60);
 
@@ -57,22 +54,45 @@ function _drawFacilityCube(cx, cy, size, colour) {
     return topZ;
 }
 
-// Small floating diamond above an NPC-bearing facility -- the visual cue for
-// "this one is interactable right now" (only NPCS_PER_RESET of the 6 carry
-// one at a time; see nakama-modules/nw_match.lua assign_npc_positions).
-function _drawNpcBeacon(cx, cy, baseTopZ) {
-    var bz = baseTopZ + 14, bh = 8;
-    var tex = solidTex(NW_COLOR_NPC_BEACON);
-    _clipAndDraw([
-        {x:cx,   y:cy-bh, z:bz,   u:0, v:0}, {x:cx+bh,y:cy,    z:bz,   u:1, v:0},
-        {x:cx,   y:cy+bh, z:bz,   u:1, v:1}, {x:cx-bh,y:cy,    z:bz,   u:0, v:1}
-    ], 1.0, tex);
-    _clipAndDraw([
-        {x:cx, y:cy, z:bz+bh, u:0.5, v:0}, {x:cx+bh,y:cy,z:bz, u:1, v:1}, {x:cx,y:cy-bh,z:bz, u:0, v:1}
-    ], 1.0, tex);
-    _clipAndDraw([
-        {x:cx, y:cy, z:bz+bh, u:0.5, v:0}, {x:cx,y:cy+bh,z:bz, u:1, v:1}, {x:cx+bh,y:cy,z:bz, u:0, v:1}
-    ], 1.0, tex);
+// NPC placeholder -- a flat billboard sprite (same rendering technique
+// src/entities/enemy.js used for the now-removed AI enemies: a small canvas
+// drawn once, cached, and rendered through the ordinary sprite pipeline in
+// itemRenderer.js/RenderItems -- not the triangle rasteriser the cubes
+// above use). Deliberately primitive: two filled shapes, no art asset,
+// smaller than an enemy sprite was ("npc" type in itemRenderer.js scales at
+// 2.6 vs enemy's 4). Marks whichever facilities currently carry an NPC
+// (NPCS_PER_RESET of the 6; see nakama-modules/nw_match.lua
+// assign_npc_positions) -- the same ones nodeWarInteract.js's dialog
+// ("Activate this Node?") already only offers at.
+var _nwNpcTexture = null;
+function _getNwNpcTexture() {
+    if (_nwNpcTexture) return _nwNpcTexture;
+    var c = document.createElement('canvas');
+    c.width = 64; c.height = 64;
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#2a3a44';
+    ctx.beginPath(); ctx.arc(32, 16, 12, 0, Math.PI * 2); ctx.fill();   // head
+    ctx.fillRect(16, 26, 32, 34);                                       // body
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath(); ctx.arc(32, 12, 4, 0, Math.PI * 2); ctx.fill();    // "has something to say"
+    var img = new Image();
+    img.src = c.toDataURL();
+    return (_nwNpcTexture = img);
+}
+
+// Sprite list for the NPC-bearing facilities, in the same {x,y,z,type,image}
+// shape main.js already builds player/enemy sprites in -- concat it onto
+// theirs before calling RenderItems(). No-op outside Node War.
+function NodeWarNpcSprites() {
+    if (gameMode !== 'nodewar' || typeof nakamaState === 'undefined' || !nakamaState.nw) return [];
+    var tex = _getNwNpcTexture();
+    var sprites = [];
+    for (var i = 0; i < nakamaState.nw.nodes.length; i++) {
+        var node = nakamaState.nw.nodes[i];
+        if (!nakamaState.nw.npcPositions[node.facilityId]) continue;
+        sprites.push({ x: node.x, y: node.y, z: getRawTerrainHeight(node.x, node.y), type: 'npc', image: tex });
+    }
+    return sprites;
 }
 
 // Apex + 4 triangular sides. No base face (sits on/in the ground, never
@@ -109,10 +129,7 @@ function RenderNodeWarObjects() {
 
     for (var i = 0; i < nakamaState.nw.nodes.length; i++) {
         var node = nakamaState.nw.nodes[i];
-        var topZ = _drawFacilityCube(node.x, node.y, NW_FACILITY_SIZE, _nwColorForNode(node));
-        if (nakamaState.nw.npcPositions[node.facilityId]) {
-            _drawNpcBeacon(node.x, node.y, topZ);
-        }
+        _drawFacilityCube(node.x, node.y, NW_FACILITY_SIZE, _nwColorForNode(node));
     }
 
     _drawMainframePyramid(0, 0);

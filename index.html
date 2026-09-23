@@ -982,6 +982,13 @@
 
 <!-- ── Weapon slots (DOM — crisp at any resolution) ── -->
 <div id="weapon-slots-ui"></div>
+<!-- Node War: Key indicator. Simple placeholder for now -- a weapon-slot
+     styled rectangle, shown only while the local player is carrying the
+     Key. Whether the Key should replace a weapon slot outright (Halo CTF
+     style) is an open design question, not decided/implemented here. -->
+<div id="nw-key-slot" class="ws-slot" style="display:none; position:fixed; bottom:20px; right:20px; z-index:200; border-color:#ffd700; background:rgba(255,215,0,0.08);">
+  <span class="ws-letter" style="color:#ffd700;">K</span>
+</div>
 
 <!-- ── Quest dialog box ── -->
 <div id="dialog-box">
@@ -1447,7 +1454,7 @@
 <script src="src/procedural/ringWorld.js?v=7"></script>
 <script src="src/rendering/voxelEngine.js?v=5"></script>
 <script src="src/rendering/cubeRenderer.js"></script>
-<script src="src/rendering/itemRenderer.js"></script>
+<script src="src/rendering/itemRenderer.js?v=1"></script>
 
 <!-- ===================================== -->
 <!-- src/ files - Entities                -->
@@ -1460,9 +1467,9 @@
 <script src="src/entities/shadowCube.js"></script>
 <script src="src/indoor/buildingRenderer.js?v=2"></script>
 <script src="src/indoor/buildingPlacer.js?v=1"></script>
-<script src="src/entities/nodeWarObjects.js?v=1"></script>
+<script src="src/entities/nodeWarObjects.js?v=2"></script>
 <script src="src/systems/nodeWarInteract.js?v=1"></script>
-<script src="src/ui/nodeWarHud.js?v=1"></script>
+<script src="src/ui/nodeWarHud.js?v=2"></script>
 <script src="quests/TestQuest.js"></script>
 <script src="quests/VoidQuest.js"></script>
 
@@ -1499,7 +1506,7 @@
 <!-- ===================================== -->
 <!-- src/ files - Map                     -->
 <!-- ===================================== -->
-<script src="src/map/mapLoader.js?v=3"></script>
+<script src="src/map/mapLoader.js?v=4"></script>
 
 <!-- ===================================== -->
 <!-- src/ files - Settings                -->
@@ -1509,7 +1516,7 @@
 <!-- ===================================== -->
 <!-- src/ files - Main Entry Point        -->
 <!-- ===================================== -->
-<script src="src/main.js?v=15"></script>
+<script src="src/main.js?v=16"></script>
 
 <!-- ── Splash screen dismiss ── -->
 <script>

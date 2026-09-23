@@ -90,6 +90,13 @@ function RenderItems(extraItems){
             // To appear circular: scaleX = scaleY × (sw/2) / focal
             scaleX *= 4 * (sw / 2) / focal;
         }
+        if (it.type === "npc") {
+            // Node War facility NPCs -- same billboard technique as "enemy"
+            // above, deliberately smaller (design ask: "make their cube
+            // smaller"). 2.6 vs enemy's 4 -> about 65% of an enemy's size.
+            scaleY *= 2.6;
+            scaleX *= 2.6 * (sw / 2) / focal;
+        }
         if (it.type === "bullet") {
             scaleX *= bulletSize;
             scaleY *= bulletSize;

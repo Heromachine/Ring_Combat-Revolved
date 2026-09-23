@@ -30,6 +30,19 @@ function nwKeyWorldPos() {
     return null;
 }
 
+// DOM Key indicator (#nw-key-slot, index.html) -- shown only while the
+// local player is physically carrying the Key. Deliberately just a letter
+// in a box for now; see the HTML comment for the open "replace a weapon
+// slot, Halo-CTF-style" question this does not attempt to answer.
+function UpdateNwKeySlot() {
+    var el = document.getElementById('nw-key-slot');
+    if (!el) return;
+    var carrying = gameMode === 'nodewar' && typeof nakamaState !== 'undefined' && nakamaState.nw
+        && nakamaState.nw.key && nakamaState.nw.key.holderUserId
+        && (typeof NakamaClient !== 'undefined') && nakamaState.nw.key.holderUserId === NakamaClient.getUserId();
+    el.style.display = carrying ? 'flex' : 'none';
+}
+
 function _nwHudUserName(userId) {
     if (!userId) return null;
     var myId = (typeof NakamaClient !== 'undefined') ? NakamaClient.getUserId() : null;
