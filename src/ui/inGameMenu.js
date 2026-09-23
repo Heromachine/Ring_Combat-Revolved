@@ -366,31 +366,53 @@ var InGameMenu = (function () {
         if (typeof buildings !== 'undefined' && buildings.length) {
             buildings.forEach(function (b) {
                 var bx = _wx2cx(b.x), by = _wy2cy(b.y);
-                if (bx < -20 || bx > cw + 20 || by < -20 || by > ch + 20) return;
+                if (bx < -40 || bx > cw + 40 || by < -40 || by > ch + 40) return;
 
-                // Small roofed-square icon so it reads as a structure, not
-                // an NPC dot or a player marker.
-                var hs = 5;
-                ctx.fillStyle = '#c9a86a';
-                ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-                ctx.lineWidth = 1;
-                ctx.fillRect(bx - hs, by - hs, hs * 2, hs * 2);
-                ctx.strokeRect(bx - hs, by - hs, hs * 2, hs * 2);
+                // Roofed-house icon so it reads as a structure, not an NPC
+                // dot or a player marker. Sized and haloed to stand out
+                // against any terrain colour behind it.
+                var hs = 9;
+                var roofH = 9;
+                var cy = by + 2;   // centre the house body+roof on the point
+
+                // Dark backing halo
                 ctx.beginPath();
-                ctx.moveTo(bx - hs - 2, by - hs);
-                ctx.lineTo(bx,          by - hs - 6);
-                ctx.lineTo(bx + hs + 2, by - hs);
-                ctx.closePath();
-                ctx.fillStyle = '#8a6d3b';
+                ctx.arc(bx, cy - 3, hs + roofH - 2, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.45)';
                 ctx.fill();
+                ctx.strokeStyle = 'rgba(255,214,120,0.9)';
+                ctx.lineWidth = 1.5;
                 ctx.stroke();
 
+                // Body
+                ctx.fillStyle = '#ffd98a';
+                ctx.strokeStyle = '#1a1208';
+                ctx.lineWidth = 1.5;
+                ctx.fillRect(bx - hs, cy - hs, hs * 2, hs * 2);
+                ctx.strokeRect(bx - hs, cy - hs, hs * 2, hs * 2);
+                // Roof
+                ctx.beginPath();
+                ctx.moveTo(bx - hs - 3, cy - hs);
+                ctx.lineTo(bx,          cy - hs - roofH);
+                ctx.lineTo(bx + hs + 3, cy - hs);
+                ctx.closePath();
+                ctx.fillStyle = '#c0392b';
+                ctx.fill();
+                ctx.stroke();
+                // Door
+                ctx.fillStyle = '#5a3a1a';
+                ctx.fillRect(bx - 2.5, cy + hs - 8, 5, 8);
+
                 var name = (typeof WorldGen !== 'undefined') ? WorldGen.biomeName(b.biome) : 'Building';
-                ctx.font = '9px monospace';
-                ctx.fillStyle = '#e8d8b0';
+                var lx = bx + hs + roofH;
+                ctx.font = 'bold 12px monospace';
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(name, bx + hs + 4, by);
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+                ctx.strokeText(name, lx, cy - 3);
+                ctx.fillStyle = '#ffe9b8';
+                ctx.fillText(name, lx, cy - 3);
             });
         }
 
