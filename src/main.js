@@ -455,10 +455,20 @@ async function StartNodeWar() {
 }
 
 async function beginNodeWarGame(isAnonymous) {
-    try {
-        await Multiplayer.init(isAnonymous, 'nodewar');
-    } catch (e) {
-        console.warn("Node War: multiplayer failed, running offline:", e);
+    // Unlike freeplay, Node War is meaningless without a real match --
+    // there's no one to fight and no way to ever see an active Node.
+    // Multiplayer.init() no longer swallows this: check its result and
+    // show an error instead of silently starting a disconnected-looking
+    // game (this was the root cause behind spawning alone at the
+    // Mainframe with nobody else visible -- a rejected match join, most
+    // often nw_match.lua's guest "no active nodes" gate, was never
+    // surfaced to the player).
+    var connected = await Multiplayer.init(isAnonymous, 'nodewar');
+    if (!connected) {
+        if (typeof NodeWarConnectError !== 'undefined') {
+            NodeWarConnectError.show(Multiplayer.getLastError());
+        }
+        return;
     }
     isAdmin = await NakamaClient.checkAdmin();
     if (isAdmin) {

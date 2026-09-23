@@ -211,3 +211,46 @@ var NodeWarWin = (function () {
 
     return { update: update, init: init };
 }());
+
+// ── Connect error screen ────────────────────────────────
+// Shown by beginNodeWarGame() (main.js) when Multiplayer.init() fails --
+// either an outright connection failure, or the server rejecting the match
+// join outright (nw_match.lua's match_join_attempt, most commonly its
+// guest "no active nodes -- guests cannot join yet" gate on a fresh/reset
+// match). The game loop is never started on this path, so this can't lazy-
+// bind from Init() like most of this file does; it binds its own button on
+// first show() instead, same pattern src/ui/modeMenu.js uses for buttons
+// that must work before Init() ever runs.
+var NodeWarConnectError = (function () {
+    var _bound = false;
+
+    function _friendlyReason(reason) {
+        if (!reason) return 'Could not connect to the server.';
+        if (/no active nodes/i.test(reason)) {
+            return 'No Node is active yet, so guests can’t join. A Clan member needs to get in and activate a Node first.';
+        }
+        return reason;
+    }
+
+    function show(reason) {
+        var el = document.getElementById('nw-connect-error');
+        if (!el) return;
+        var reasonEl = document.getElementById('nw-connect-error-reason');
+        if (reasonEl) reasonEl.textContent = _friendlyReason(reason);
+        var gc = document.getElementById('game-container');
+        if (gc) gc.style.display = 'none';
+        if (document.exitPointerLock) document.exitPointerLock();
+        el.style.display = 'flex';
+
+        if (!_bound) {
+            _bound = true;
+            var btn = document.getElementById('nw-connect-error-back');
+            if (btn) btn.addEventListener('click', function () {
+                el.style.display = 'none';
+                if (typeof exitGame === 'function') exitGame();
+            });
+        }
+    }
+
+    return { show: show };
+}());

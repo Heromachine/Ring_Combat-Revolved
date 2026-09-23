@@ -1114,6 +1114,18 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════ -->
+<!-- NODE WAR: CONNECT ERROR               -->
+<!-- ══════════════════════════════════════ -->
+<div id="nw-connect-error" class="mp-overlay">
+  <div class="kick-box">
+    <div class="kick-icon">&#9888;</div>
+    <div class="kick-title" style="color:#e0a050;">Couldn't Join Node War</div>
+    <div class="kick-reason" id="nw-connect-error-reason"></div>
+    <button class="mp-btn" id="nw-connect-error-back">Back to Menu</button>
+  </div>
+</div>
+
 <div id="controls" style="display: none; position: absolute; top: 50px; left: 10px; background: rgba(8,15,22,0.95); color: #8ab0c8; padding: 0; width: 360px; border-radius: 4px; overflow: hidden; z-index: 100; border: 1px solid rgba(80,160,220,0.15); font-family: 'Segoe UI', system-ui, sans-serif;">
   <!-- Panel Title -->
   <div id="settings-drag-handle" style="background: rgba(80,160,220,0.06); padding: 8px 12px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #5a90b0; border-bottom: 1px solid rgba(80,160,220,0.12); cursor: move; user-select: none;">Settings <span style="float:right; font-size:10px; color: rgba(138,176,200,0.35); letter-spacing:1px;">[ESC] toggle</span></div>
@@ -1416,7 +1428,7 @@
 <!-- Multiplayer Network Layer            -->
 <!-- ===================================== -->
 <script src="src/network/nakamaClient.js?v=5"></script>
-<script src="src/network/multiplayer.js?v=3"></script>
+<script src="src/network/multiplayer.js?v=4"></script>
 
 <!-- ===================================== -->
 <!-- Multiplayer UI                       -->
@@ -1469,7 +1481,7 @@
 <script src="src/indoor/buildingPlacer.js?v=1"></script>
 <script src="src/entities/nodeWarObjects.js?v=2"></script>
 <script src="src/systems/nodeWarInteract.js?v=1"></script>
-<script src="src/ui/nodeWarHud.js?v=2"></script>
+<script src="src/ui/nodeWarHud.js?v=3"></script>
 <script src="quests/TestQuest.js"></script>
 <script src="quests/VoidQuest.js"></script>
 
@@ -1516,7 +1528,7 @@
 <!-- ===================================== -->
 <!-- src/ files - Main Entry Point        -->
 <!-- ===================================== -->
-<script src="src/main.js?v=16"></script>
+<script src="src/main.js?v=17"></script>
 
 <!-- ── Splash screen dismiss ── -->
 <script>

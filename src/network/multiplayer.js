@@ -51,6 +51,7 @@ var Multiplayer = (function () {
     var _isAnonymous      = false;
     var _respawnInterval  = null;
     var _intentionalExit  = false;
+    var _lastError        = null;  // human-readable reason init() last failed for
 
     // Position broadcast throttle
     var POSITION_INTERVAL_MS = 100;  // 10 Hz
@@ -62,9 +63,28 @@ var Multiplayer = (function () {
 
     // ── Init ─────────────────────────────────────────────────
 
+    // Best-effort extraction of a human-readable reason from whatever shape
+    // the Nakama JS SDK rejected with -- a plain Error (network failure) or
+    // the server's own {error:{message}} envelope (e.g. match_join_attempt
+    // returning false, such as nw_match.lua's "no active nodes -- guests
+    // cannot join yet").
+    function _describeError(e) {
+        if (!e) return 'Unknown error';
+        if (typeof e === 'string') return e;
+        if (e.message) return e.message;
+        if (e.error && e.error.message) return e.error.message;
+        try { return JSON.stringify(e); } catch (_e2) { return String(e); }
+    }
+
+    // Returns true/false rather than throwing -- callers decide what a
+    // failed connection means for them. Freeplay treats it as a soft
+    // "run offline" fallback; Node War (see beginNodeWarGame() in main.js)
+    // cannot function without a real match and must not silently continue,
+    // so it checks this return value and shows an error instead.
     async function init(isAnonymous, matchType) {
         _intentionalExit = false;
         _isAnonymous = isAnonymous;
+        _lastError = null;
 
         try {
             await NakamaClient.connect(onMessage, onDisconnect);
@@ -82,11 +102,16 @@ var Multiplayer = (function () {
                     nakamaState.myClan = saved.clan;
                 }
             }
+            return true;
         } catch (e) {
             console.error("Multiplayer init failed:", e);
             _connected = false;
+            _lastError = _describeError(e);
+            return false;
         }
     }
+
+    function getLastError() { return _lastError; }
 
     // ── Disconnect ────────────────────────────────────────────
 
@@ -531,6 +556,7 @@ var Multiplayer = (function () {
         sendShoot:  sendShoot,
         reportHit:  reportHit,
         isConnected: function () { return _connected; },
+        getLastError: getLastError,
 
         // Node War — Client → Server
         nwNodeActivateStart:         nwNodeActivateStart,
