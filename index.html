@@ -267,6 +267,92 @@
             animation: prompt-pulse 1.8s ease-in-out infinite;
             white-space: nowrap;
         }
+
+        /* ── Node War: facility/Mainframe interaction ── */
+        #nw-prompt {
+            position: fixed;
+            bottom: 34%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(5,10,18,0.82);
+            color: #e8c85a;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 0.72rem;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            padding: 6px 20px;
+            border: 1px solid rgba(220,180,60,0.35);
+            border-radius: 3px;
+            z-index: 200;
+            pointer-events: none;
+            display: none;
+            white-space: nowrap;
+        }
+        #nw-confirm {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(5,10,18,0.97);
+            border: 1px solid rgba(220,180,60,0.35);
+            border-radius: 4px;
+            color: #c0d8e8;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            padding: 18px 24px;
+            z-index: 401;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            min-width: 260px;
+            text-align: center;
+        }
+        #nw-confirm-text { font-size: 0.95rem; line-height: 1.4; }
+        #nw-confirm-buttons { display: flex; gap: 10px; justify-content: center; }
+        #nw-confirm button {
+            background: rgba(80,160,220,0.12);
+            border: 1px solid rgba(80,160,220,0.4);
+            color: #c0d8e8;
+            font-family: inherit;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            padding: 7px 18px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        #nw-confirm button:hover { background: rgba(80,160,220,0.24); }
+        #nw-activation-bar {
+            position: fixed;
+            bottom: 22%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 260px;
+            display: none;
+            z-index: 200;
+            text-align: center;
+        }
+        #nw-activation-label {
+            color: #e8c85a;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 0.68rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            text-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+        #nw-activation-track {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(220,180,60,0.35);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        #nw-activation-fill {
+            width: 0%;
+            height: 100%;
+            background: rgba(232,200,90,0.9);
+            transition: width 0.05s linear;
+        }
         @keyframes prompt-pulse {
             0%, 100% { opacity: 0.55; }
             50%       { opacity: 1.0; }
@@ -864,6 +950,19 @@
 
 <!-- ── NPC interact prompt ── -->
 <div id="interact-prompt"></div>
+<!-- Node War: facility/Mainframe interaction -->
+<div id="nw-prompt"></div>
+<div id="nw-confirm">
+  <div id="nw-confirm-text"></div>
+  <div id="nw-confirm-buttons">
+    <button id="nw-confirm-accept">Accept</button>
+    <button id="nw-confirm-cancel">Cancel</button>
+  </div>
+</div>
+<div id="nw-activation-bar">
+  <div id="nw-activation-label"></div>
+  <div id="nw-activation-track"><div id="nw-activation-fill"></div></div>
+</div>
 
 <!-- ── Weapon pickup prompt ── -->
 <div id="pickup-prompt"></div>
@@ -1327,14 +1426,16 @@
 <!-- ===================================== -->
 <!-- src/ files - Entities                -->
 <!-- ===================================== -->
-<script src="src/entities/camera.js?v=7"></script>
+<script src="src/entities/camera.js?v=8"></script>
 <script src="src/entities/testTarget.js"></script>
 <script src="src/entities/items.js?v=4"></script>
 <script src="src/entities/enemy.js"></script>
 <script src="src/entities/greenCube.js"></script>
 <script src="src/entities/shadowCube.js"></script>
-<script src="src/indoor/buildingRenderer.js?v=1"></script>
+<script src="src/indoor/buildingRenderer.js?v=2"></script>
 <script src="src/indoor/buildingPlacer.js?v=1"></script>
+<script src="src/entities/nodeWarObjects.js?v=1"></script>
+<script src="src/systems/nodeWarInteract.js?v=1"></script>
 <script src="quests/TestQuest.js"></script>
 <script src="quests/VoidQuest.js"></script>
 
@@ -1381,7 +1482,7 @@
 <!-- ===================================== -->
 <!-- src/ files - Main Entry Point        -->
 <!-- ===================================== -->
-<script src="src/main.js?v=13"></script>
+<script src="src/main.js?v=14"></script>
 
 <!-- ── Splash screen dismiss ── -->
 <script>

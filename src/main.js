@@ -147,6 +147,11 @@ function OnResizeWindow(){
 var _loopActive = false;
 var gameMode = 'freeplay'; // 'freeplay' | 'nodewar'
 
+// Node War: true while the player is channelling a Node/Mainframe
+// activation or deactivation. Read by camera.js's movement lock and by
+// src/systems/nodeWarInteract.js's own state machine.
+var nwActivationLocked = false;
+
 function exitGame() {
     _loopActive = false;
     gameMode = 'freeplay';
@@ -181,9 +186,11 @@ function Draw(timestamp){
         updateGreenCubeFloat(timestamp);
         updateShadowCubeFloat(timestamp);
         QuestManager.update();
+        if (typeof NodeWarInteract !== 'undefined') NodeWarInteract.update();
         DrawBackground();
         RenderCube();
         if (typeof RenderBuilding === 'function') RenderBuilding();
+        if (typeof RenderNodeWarObjects === 'function') RenderNodeWarObjects();
         RenderGreenCube();
         RenderShadowCube();
         Render();
@@ -274,6 +281,7 @@ function Init(){
     initGreenCube();
     initShadowCube();
     QuestManager.init();
+    if (typeof NodeWarInteract !== 'undefined') NodeWarInteract.init();
     InGameMenu.init();
 
     var canvas=document.getElementById("fullscreenCanvas");

@@ -52,6 +52,13 @@ function registerBuilding(cfg) {
 }
 
 function _sampleBuildingTex(tex, u, v) {
+    // Flat-colour "texture": a plain object {solid: 0xAABBGGRR} rather than a
+    // loaded image. Lets any caller of the quad/triangle rasteriser below
+    // (facility cubes, the mainframe pyramid -- src/entities/nodeWarObjects.js)
+    // draw solid, dynamically-recolourable geometry through the SAME
+    // clip/project/depth-test pipeline as real textures, with no second
+    // rasteriser to maintain.
+    if (tex.solid !== undefined) return tex.solid;
     if (!tex.loaded) return 0xFF888888;
     u = u - Math.floor(u); v = v - Math.floor(v);
     var tx = Math.min(tex.width - 1, Math.floor(u * tex.width));
@@ -59,6 +66,10 @@ function _sampleBuildingTex(tex, u, v) {
     var i = (ty * tex.width + tx) * 4;
     return 0xFF000000 | (tex.data[i+2] << 16) | (tex.data[i+1] << 8) | tex.data[i];
 }
+
+// ABGR packed colour from separate 0-255 channels, for solidTex() callers.
+function packColor(r, g, b) { return (0xFF000000 | (b << 16) | (g << 8) | r) >>> 0; }
+function solidTex(abgr) { return { loaded: true, solid: abgr }; }
 
 // Identical rasteriser to cubeRenderer.js's triangle fill, parameterised by
 // texture so walls/floor/ceiling can each sample their own.

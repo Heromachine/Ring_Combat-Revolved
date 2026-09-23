@@ -214,6 +214,17 @@ function UpdateCamera(){
     // Push player away from cube if too close (prevents camera clipping on rotation)
     pushAwayFromCube();
 
+    // Node War: movement is locked while activating/deactivating a node or
+    // the Mainframe (design doc: "cannot move... fully vulnerable"). Forcing
+    // the frame's movement inputs to zero here, once, is simpler and less
+    // error-prone than gating all six WASD/analog blocks below individually.
+    // Held keys resume the instant the lock clears -- keydown/keyup still
+    // track real state independently of this per-frame override.
+    if (typeof nwActivationLocked !== 'undefined' && nwActivationLocked) {
+        input.forward = input.backward = input.left = input.right = false;
+        input.moveX = 0; input.moveY = 0;
+    }
+
     // Keyboard Movement
     if(input.forward){nx=camera.x-Math.sin(camera.angle)*baseSpeed;ny=camera.y-Math.cos(camera.angle)*baseSpeed;slopeMult=canMoveTo(nx,ny);camera.x+=(nx-camera.x)*slopeMult;camera.y+=(ny-camera.y)*slopeMult;}
     if(input.backward){nx=camera.x+Math.sin(camera.angle)*baseSpeed;ny=camera.y+Math.cos(camera.angle)*baseSpeed;slopeMult=canMoveTo(nx,ny);camera.x+=(nx-camera.x)*slopeMult;camera.y+=(ny-camera.y)*slopeMult;}
