@@ -99,6 +99,21 @@ function pollGamepad(){
 
     // X button for pickup when near a weapon
     input.gpPickupWeapon = isPressed(gamepad.buttons.pickup);
+
+    // B button - "activate": same action as the keyboard F key (talk to an
+    // NPC's quest dialog, or open a Node War node/Mainframe confirm prompt).
+    // Dispatched as a real synthetic keydown rather than calling into
+    // QuestManager/NodeWarInteract directly -- both already listen for
+    // KeyF on document and hold all the relevant state (open dialog,
+    // current prompt target, etc.) in private closures with no public
+    // method for "press F" to call instead. This guarantees B always does
+    // exactly what F does, including any future change to either module,
+    // with nothing to keep in sync by hand.
+    var gpActivate = isPressed(gamepad.buttons.activate);
+    if(gpActivate && !gamepad.prevActivate){
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF' }));
+    }
+    gamepad.prevActivate = gpActivate;
 }
 
 function toggleDebugUI(){

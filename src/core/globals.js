@@ -253,10 +253,12 @@ var gamepad={
     // Previous button states for edge detection
     prevJump:false,
     prevStart:false,
+    prevActivate:false,
     // Standard gamepad mapping (Xbox-style, works with most controllers)
     buttons:{
         jump:4,        // LB (Left Bumper) - hold to charge, release to jump
-        crouch:1,      // B
+        crouch:11,     // Right Stick Click (R3)
+        activate:1,    // B - same as keyboard F (talk to NPC / Node War activate)
         reload:2,      // X
         sprint:10,     // Left Stick Click
         sprintAlt:0,   // A button (alternative sprint)
