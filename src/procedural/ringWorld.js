@@ -371,6 +371,15 @@ function RenderRingBackdrop() {
                 ok = true;
                 if (it === reliefIters) break;
 
+                // Night-time perf: this loop's sqrt-based quadratic re-solve
+                // is the most expensive part of the whole backdrop pass, and
+                // it exists purely to refine visible terrain relief. Once
+                // the first (cheap, always-computed) pass shows a sample has
+                // landed somewhere fully dark, nobody can tell relief-shaded
+                // terrain apart from flat near-black -- skip the remaining
+                // refinement iterations and use this rough hit as-is.
+                if (it === 0 && typeof DayNight !== 'undefined' && DayNight.isFullyDark(DayNight.intensityAtY(ty))) break;
+
                 // Terrain on the inside of a ring rises toward the axis, so a
                 // taller sample means a SMALLER surface radius. Feed it back
                 // and re-solve.
