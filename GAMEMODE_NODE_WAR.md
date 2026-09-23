@@ -36,9 +36,10 @@ they are always OP and steal the Key to stall or reset the game.
 ### 1. Node Activation (Clans only)
 
 - Player walks up to a facility NPC → NPC asks: **"Do you want to activate this Node?"**
-- On accept: progress bar fills 0→100%. Player cannot move. **Fully vulnerable.**
-  Teammates must protect them.
-- Killed or exits dialog before 100% → progress resets to 0%.
+- On accept: progress bar fills 0→100%. Player is **not** movement-locked, but
+  walking too far from the facility cancels the attempt. **Fully vulnerable**
+  either way — teammates must protect them.
+- Killed, walking out of range, or exiting the dialog before 100% → progress resets to 0%.
 - On completion: Node is **Active for that team** — appears on all maps.
 - **3rd faction players cannot activate Nodes.** NPCs will not accept their request.
 
@@ -58,7 +59,8 @@ they are always OP and steal the Key to stall or reset the game.
 
 ### 4. Mainframe Activation
 
-- Key holder reaches the Mainframe and triggers a **progress bar** (same mechanic as Nodes).
+- Key holder reaches the Mainframe and triggers a **progress bar** (same mechanic as Nodes,
+  including movement: not locked, but walking too far cancels it).
 - **Fully vulnerable during activation.** Teammates must protect.
 - On completion: **5-minute countdown begins.**
 - Key holder receives **OP buff**: full health restored, 50% damage reduction.

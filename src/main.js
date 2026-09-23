@@ -147,11 +147,6 @@ function OnResizeWindow(){
 var _loopActive = false;
 var gameMode = 'freeplay'; // 'freeplay' | 'nodewar'
 
-// Node War: true while the player is channelling a Node/Mainframe
-// activation or deactivation. Read by camera.js's movement lock and by
-// src/systems/nodeWarInteract.js's own state machine.
-var nwActivationLocked = false;
-
 function exitGame() {
     _loopActive = false;
     gameMode = 'freeplay';

@@ -18,12 +18,14 @@
 // other's clicks.
 "use strict";
 
-// Matches nakama-modules/nw_match.lua's MIN_ACTIVATION_TICKS = 3 * TICK_RATE
-// (TICK_RATE 20) = 3000 ms. The +200 ms margin is slack against clock drift
-// between the client's local timer and the server's tick count -- firing
-// *_COMPLETE a hair early gets silently rejected (node.activating survives,
-// nothing breaks), but padding removes the retry entirely in the normal case.
-var NW_ACTIVATION_MS = 3000 + 200;
+// Matches nakama-modules/nw_match.lua's MIN_ACTIVATION_TICKS = 6 * TICK_RATE
+// (TICK_RATE 20) = 6000 ms (slowed from 3s per user request -- update both
+// sides together if this changes again). The +200 ms margin is slack against
+// clock drift between the client's local timer and the server's tick count
+// -- firing *_COMPLETE a hair early gets silently rejected (node.activating
+// survives, nothing breaks), but padding removes the retry entirely in the
+// normal case.
+var NW_ACTIVATION_MS = 6000 + 200;
 
 // Matches ACTIVATION_RANGE/MAINFRAME_RANGE (60 WU) in nw_match.lua, with a
 // safety margin so the prompt never shows for a position the server would
@@ -215,7 +217,6 @@ var NodeWarInteract = (function () {
 
         _mode = 'active';
         _channelStartMs = Date.now();
-        nwActivationLocked = true;
         var label = document.getElementById('nw-activation-label');
         var fill  = document.getElementById('nw-activation-fill');
         var bar   = document.getElementById('nw-activation-bar');
@@ -228,10 +229,12 @@ var NodeWarInteract = (function () {
     // independently expires an abandoned activation once the player leaves
     // range (nw_match.lua match_loop's "Expire stale activations"), and
     // clears it entirely on death -- this only has to reset the CLIENT's own
-    // UI/lock state, never the server's.
+    // UI state, never the server's. Movement is never locked during a
+    // channel (removed per user request -- the player can walk around
+    // freely; moving too far is exactly what _tickChannel()'s own leash
+    // check above is for), so there's no lock flag to release here either.
     function _cancelChannel() {
         _mode = 'idle';
-        nwActivationLocked = false;
         var bar = document.getElementById('nw-activation-bar');
         if (bar) bar.style.display = 'none';
         // Same reasoning as _closeConfirm(): update() returns right after
@@ -248,8 +251,17 @@ var NodeWarInteract = (function () {
             : { x: 0, y: 0 };
 
         // Left range, or died -- proactively cancel rather than waiting for
-        // a *_COMPLETE the server would silently drop.
-        if (player.health <= 0 || !facPos || _distSq(facPos.x, facPos.y) > NW_INTERACT_RANGE_SQ * 1.4) {
+        // a *_COMPLETE the server would silently drop. Uses the exact same
+        // range as the prompt-eligibility check (NW_INTERACT_RANGE_SQ), NOT
+        // a looser one: that constant is already a safety margin UNDER the
+        // server's real ACTIVATION_RANGE/MAINFRAME_RANGE (55 vs 60 WU), so
+        // reusing it here guarantees the client never lets the bar finish
+        // from a position the server would actually reject. An earlier
+        // version of this check used `* 1.4`, which pushed the client's
+        // threshold to ~65 WU -- past the server's real 60 WU limit -- so a
+        // channel could visibly complete client-side while the server
+        // silently dropped the *_COMPLETE for being out of range.
+        if (player.health <= 0 || !facPos || _distSq(facPos.x, facPos.y) > NW_INTERACT_RANGE_SQ) {
             _cancelChannel();
             return;
         }
@@ -282,7 +294,9 @@ var NodeWarInteract = (function () {
             : _targetKind === 'key'
             ? (nakamaState.nw.key && nakamaState.nw.key.groundPos)
             : { x: 0, y: 0 };
-        var rangeSq = (_targetKind === 'key' ? NW_KEY_PICKUP_RANGE_SQ : NW_INTERACT_RANGE_SQ) * 1.4;
+        // Same range as the prompt-eligibility check, not a looser one --
+        // see _tickChannel()'s comment for why.
+        var rangeSq = _targetKind === 'key' ? NW_KEY_PICKUP_RANGE_SQ : NW_INTERACT_RANGE_SQ;
         if (player.health <= 0 || !pos || _distSq(pos.x, pos.y) > rangeSq) {
             _closeConfirm();
         }
