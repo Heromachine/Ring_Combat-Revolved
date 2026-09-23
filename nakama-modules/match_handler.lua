@@ -82,6 +82,10 @@ local function dist2d(x1, y1, x2, y2)
     return rcr_config.dist2d(x1, y1, x2, y2)
 end
 
+-- Same fix as nw_match.lua's load_player_data (see its comment): Nakama's
+-- Lua runtime hands storage_read's `.value` back already decoded into a
+-- Lua table, so json_decode-ing it threw and was silently swallowed by
+-- pcall, making every clan lookup here fail closed to nil too.
 local function load_player_data(user_id)
     local ok, result = pcall(function()
         return _nk.storage_read({{
@@ -89,7 +93,9 @@ local function load_player_data(user_id)
         }})
     end)
     if ok and result and #result > 0 then
-        local ok2, data = pcall(_nk.json_decode, result[1].value)
+        local raw = result[1].value
+        if type(raw) == "table" then return raw end
+        local ok2, data = pcall(_nk.json_decode, raw)
         if ok2 then return data end
     end
     return nil

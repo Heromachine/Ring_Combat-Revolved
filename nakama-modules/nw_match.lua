@@ -146,12 +146,22 @@ local function get_faction(clan)
     return CLAN_TO_FACTION[clan] or "guest"
 end
 
+-- nk.storage_read() hands back `.value` already decoded into a Lua table,
+-- not a JSON string -- calling nk.json_decode() on it throws (pcall
+-- swallows it silently, no log line), so this always fell through to
+-- `return nil`. Confirmed live: a real clan1 account with a verified-correct
+-- `{"clan":"iron_ravens"}` storage object still read back as guest every
+-- time. Handle a table directly; keep the string/json_decode path too in
+-- case a future Nakama version (or a differently-configured storage
+-- collection) really does hand back a raw string.
 local function load_player_data(user_id)
     local ok, result = pcall(function()
         return nk.storage_read({{ collection = "player", key = "data", user_id = user_id }})
     end)
     if ok and result and #result > 0 then
-        local ok2, data = pcall(nk.json_decode, result[1].value)
+        local raw = result[1].value
+        if type(raw) == "table" then return raw end
+        local ok2, data = pcall(nk.json_decode, raw)
         if ok2 then return data end
     end
     return nil
