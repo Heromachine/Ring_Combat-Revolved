@@ -166,14 +166,22 @@ function _renderOneBuilding(cfg) {
 
     var wTex = cfg._wallTex, cTex = cfg._ceilingTex, fTex = cfg._floorTex;
 
+    // Day/night: computed ONCE per building (not per quad, not per pixel)
+    // from the building's own world Y, then folded into every shade value
+    // below -- shade is already just a per-pixel multiplier the rasteriser
+    // applies (_drawBuildingTri's `tc_channel * shade`), so this needs no
+    // change to the rasteriser itself. Buildings previously never
+    // darkened at all, regardless of time of day.
+    var nightFactor = (typeof DayNight !== 'undefined') ? DayNight.intensityAtY(cfg.y) : 1;
+
     function hWall(wy,ax,bx,shade){var len=bx-ax; if(len<=0)return;
-        _drawBuildingQuad({x:ax,y:wy,z:baseZ},{x:bx,y:wy,z:baseZ},{x:bx,y:wy,z:topZ},{x:ax,y:wy,z:topZ},shade,wTex,len/wH,1);}
+        _drawBuildingQuad({x:ax,y:wy,z:baseZ},{x:bx,y:wy,z:baseZ},{x:bx,y:wy,z:topZ},{x:ax,y:wy,z:topZ},shade*nightFactor,wTex,len/wH,1);}
     function hHeader(wy,ax,bx,fromZ,shade){var len=bx-ax,hh=topZ-fromZ; if(len<=0||hh<=0)return;
-        _drawBuildingQuad({x:ax,y:wy,z:fromZ},{x:bx,y:wy,z:fromZ},{x:bx,y:wy,z:topZ},{x:ax,y:wy,z:topZ},shade,wTex,len/wH,hh/wH);}
+        _drawBuildingQuad({x:ax,y:wy,z:fromZ},{x:bx,y:wy,z:fromZ},{x:bx,y:wy,z:topZ},{x:ax,y:wy,z:topZ},shade*nightFactor,wTex,len/wH,hh/wH);}
     function vWall(wx,ay,by,shade){var len=by-ay; if(len<=0)return;
-        _drawBuildingQuad({x:wx,y:ay,z:baseZ},{x:wx,y:by,z:baseZ},{x:wx,y:by,z:topZ},{x:wx,y:ay,z:topZ},shade,wTex,len/wH,1);}
+        _drawBuildingQuad({x:wx,y:ay,z:baseZ},{x:wx,y:by,z:baseZ},{x:wx,y:by,z:topZ},{x:wx,y:ay,z:topZ},shade*nightFactor,wTex,len/wH,1);}
     function vHeader(wx,ay,by,fromZ,shade){var len=by-ay,hh=topZ-fromZ; if(len<=0||hh<=0)return;
-        _drawBuildingQuad({x:wx,y:ay,z:fromZ},{x:wx,y:by,z:fromZ},{x:wx,y:by,z:topZ},{x:wx,y:ay,z:topZ},shade,wTex,len/wH,hh/wH);}
+        _drawBuildingQuad({x:wx,y:ay,z:fromZ},{x:wx,y:by,z:fromZ},{x:wx,y:by,z:topZ},{x:wx,y:ay,z:topZ},shade*nightFactor,wTex,len/wH,hh/wH);}
 
     hWall(oy1, ox1, ox2, 0.65);       // north
     vWall(ox2, oy1, oy2, 0.80);       // east
@@ -199,8 +207,8 @@ function _renderOneBuilding(cfg) {
     }
 
     var rU = cfg.width/64, rV2 = cfg.depth/64;
-    _drawBuildingQuad({x:ox1,y:oy1,z:baseZ},{x:ox2,y:oy1,z:baseZ},{x:ox2,y:oy2,z:baseZ},{x:ox1,y:oy2,z:baseZ}, 0.90, fTex, rU, rV2);
-    _drawBuildingQuad({x:ox1,y:oy2,z:topZ},{x:ox2,y:oy2,z:topZ},{x:ox2,y:oy1,z:topZ},{x:ox1,y:oy1,z:topZ}, 0.85, cTex, rU, rV2);
+    _drawBuildingQuad({x:ox1,y:oy1,z:baseZ},{x:ox2,y:oy1,z:baseZ},{x:ox2,y:oy2,z:baseZ},{x:ox1,y:oy2,z:baseZ}, 0.90*nightFactor, fTex, rU, rV2);
+    _drawBuildingQuad({x:ox1,y:oy2,z:topZ},{x:ox2,y:oy2,z:topZ},{x:ox2,y:oy1,z:topZ},{x:ox1,y:oy1,z:topZ}, 0.85*nightFactor, cTex, rU, rV2);
 }
 
 // Called each frame from main.js, once, for ALL registered buildings.

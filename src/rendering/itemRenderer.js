@@ -71,6 +71,12 @@ function RenderItems(extraItems){
         var screenX = right * (sw / 2) / groundForward + sw/2;
         var screenY = (camera.height - it.z) * focal / groundForward + camera.horizon;
 
+        // Day/night: computed ONCE per item (not per pixel) from the
+        // item's own world Y -- trees, players, bullets etc. previously
+        // never darkened at all, regardless of time of day, since this
+        // whole file was untouched by the original day/night work.
+        var _itemLight = (typeof DayNight !== 'undefined') ? DayNight.intensityAtY(it.y) : 1;
+
         var scale = 12 * focal / groundForward;
         var scaleX = scale;
         var scaleY = scale;
@@ -181,9 +187,23 @@ function RenderItems(extraItems){
                 var r = pixels[srcIdx];
                 var g = pixels[srcIdx + 1];
                 var b = pixels[srcIdx + 2];
+                if (_itemLight !== 1) {
+                    r = (r * _itemLight) | 0;
+                    g = (g * _itemLight) | 0;
+                    b = (b * _itemLight) | 0;
+                }
 
                 // Write to buffer (ABGR format for Uint32Array on little-endian)
                 buf32[bufIdx] = 0xFF000000 | (b << 16) | (g << 8) | r;
+                // Items never wrote depth before -- occlusion between items
+                // (sorted back-to-front already, so painter's algorithm
+                // handled that fine) worked without it, but nothing drawn
+                // AFTER items (the flashlight's post-process pass) could
+                // tell an item was there: depth[bufIdx] still held whatever
+                // the terrain pass left at that pixel, or Infinity (sky) for
+                // any part of a tall sprite reaching above the terrain
+                // silhouette -- exactly where a tree's canopy usually is.
+                depth[bufIdx] = groundForward;
             }
         }
     });

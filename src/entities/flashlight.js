@@ -23,7 +23,10 @@
 
 var flashlightOn = false;
 
-var FLASHLIGHT_RADIUS_FRAC   = 0.70;   // cone radius, as a fraction of screen height (doubled -- less concentrated)
+var FLASHLIGHT_RADIUS_FRAC   = 0.42;   // cone radius, as a fraction of screen height.
+                                        // 0.35 -> 0.70 (doubled) read as too big; user asked
+                                        // for roughly a 20% increase over the ORIGINAL 0.35
+                                        // instead, so 0.35 * 1.2 = 0.42.
 var FLASHLIGHT_MAX_WORLD_DIST = 700;   // world units -- no effect at all beyond this
 var FLASHLIGHT_MAX_BOOST      = 0.6;   // caps how far toward the light colour ANY pixel can
                                         // blend, even dead centre at point-blank range -- the
