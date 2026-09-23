@@ -541,6 +541,19 @@
             gap: 8px;
             margin-bottom: 20px;
         }
+        #ingame-mode-label {
+            display: none;
+            font-size: 0.62rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #ffd700;
+            border: 1px solid rgba(255,215,0,0.3);
+            background: rgba(255,215,0,0.06);
+            border-radius: 3px;
+            padding: 6px 10px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
         #ingame-resume, #ingame-exit {
             flex: 1;
             padding: 10px;
@@ -995,6 +1008,7 @@
       <button class="ingame-tab" data-tab="map">Map</button>
     </div>
     <div id="ingame-panel-menu" class="ingame-panel">
+      <div id="ingame-mode-label">Node War</div>
       <div class="ingame-action-row">
         <button id="ingame-resume">&#9654; Resume</button>
         <button id="ingame-exit">&#9632; Exit</button>
@@ -1078,6 +1092,18 @@
     <div class="kick-title">Kicked</div>
     <div class="kick-reason"></div>
     <div class="kick-sub">Refresh the page to reconnect.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ -->
+<!-- NODE WAR: WIN SCREEN                  -->
+<!-- ══════════════════════════════════════ -->
+<div id="nw-win-screen" class="mp-overlay">
+  <div class="kick-box">
+    <div class="kick-icon" id="nw-win-icon">&#9733;</div>
+    <div class="kick-title" id="nw-win-title">VICTORY</div>
+    <div class="kick-reason" id="nw-win-sub"></div>
+    <button class="mp-btn" id="nw-win-continue">Continue</button>
   </div>
 </div>
 
@@ -1436,6 +1462,7 @@
 <script src="src/indoor/buildingPlacer.js?v=1"></script>
 <script src="src/entities/nodeWarObjects.js?v=1"></script>
 <script src="src/systems/nodeWarInteract.js?v=1"></script>
+<script src="src/ui/nodeWarHud.js?v=1"></script>
 <script src="quests/TestQuest.js"></script>
 <script src="quests/VoidQuest.js"></script>
 
@@ -1454,12 +1481,12 @@
 <!-- ===================================== -->
 <!-- src/ files - UI                      -->
 <!-- ===================================== -->
-<script src="src/ui/minimap.js?v=3"></script>
+<script src="src/ui/minimap.js?v=4"></script>
 <script src="src/ui/debugInfo.js"></script>
 <script src="src/ui/scoreboard.js"></script>
 <script src="src/ui/weaponUI.js"></script>
 <script src="src/ui/touchControls.js"></script>
-<script src="src/ui/inGameMenu.js?v=6"></script>
+<script src="src/ui/inGameMenu.js?v=7"></script>
 
 <!-- ===================================== -->
 <!-- src/ files - Input                   -->
@@ -1482,7 +1509,7 @@
 <!-- ===================================== -->
 <!-- src/ files - Main Entry Point        -->
 <!-- ===================================== -->
-<script src="src/main.js?v=14"></script>
+<script src="src/main.js?v=15"></script>
 
 <!-- ── Splash screen dismiss ── -->
 <script>

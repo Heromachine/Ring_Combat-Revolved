@@ -187,6 +187,7 @@ function Draw(timestamp){
         updateShadowCubeFloat(timestamp);
         QuestManager.update();
         if (typeof NodeWarInteract !== 'undefined') NodeWarInteract.update();
+        if (typeof NodeWarWin !== 'undefined') NodeWarWin.update();
         DrawBackground();
         RenderCube();
         if (typeof RenderBuilding === 'function') RenderBuilding();
@@ -224,6 +225,7 @@ function Draw(timestamp){
         RenderGunViewmodel(screendata.context);
         RenderSniperScope();
         DrawMinimap();
+        if (typeof DrawNodeWarHud === 'function') DrawNodeWarHud();
         DrawWeaponUI(screendata.context);
         // In portrait mode draw controls on the separate controls canvas; otherwise on game canvas
         if (touchControls.controlsCtx) {
@@ -282,6 +284,7 @@ function Init(){
     initShadowCube();
     QuestManager.init();
     if (typeof NodeWarInteract !== 'undefined') NodeWarInteract.init();
+    if (typeof NodeWarWin !== 'undefined') NodeWarWin.init();
     InGameMenu.init();
 
     var canvas=document.getElementById("fullscreenCanvas");

@@ -140,6 +140,57 @@ function DrawMinimap() {
         }
     }
 
+    // ---- Node War: facilities, Mainframe, Key (design doc: "All active
+    // Nodes are visible on every player's map at all times") ----
+    if (gameMode === 'nodewar' && typeof nakamaState !== 'undefined' && nakamaState.nw) {
+        var nw = nakamaState.nw;
+        for (var nwi = 0; nwi < nw.nodes.length; nwi++) {
+            var nnode = nw.nodes[nwi];
+            var nnx = (nnode.x - camera.x) * scale;
+            var nny = (nnode.y - camera.y) * scale;
+            if (Math.abs(nnx) > range * scale + 10 || Math.abs(nny) > range * scale + 10) continue;
+            var nColor = (nnode.status === 'active')
+                ? (NW_HUD_FACTION_COLOR[nnode.team] || NW_HUD_FACTION_COLOR.neutral)
+                : NW_HUD_FACTION_COLOR.neutral;
+            ctx.beginPath();
+            ctx.arc(nnx, nny, 5, 0, Math.PI * 2);
+            ctx.fillStyle = nColor;
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        var mfx = (0 - camera.x) * scale, mfy = (0 - camera.y) * scale;
+        if (Math.abs(mfx) <= range * scale + 10 && Math.abs(mfy) <= range * scale + 10) {
+            var mfOn = nw.mainframe && nw.mainframe.active;
+            ctx.beginPath();
+            ctx.moveTo(mfx, mfy - 6);
+            ctx.lineTo(mfx + 6, mfy + 5);
+            ctx.lineTo(mfx - 6, mfy + 5);
+            ctx.closePath();
+            ctx.fillStyle = mfOn ? '#ffd700' : 'rgba(180,180,190,0.6)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        var keyPos = nwKeyWorldPos();
+        if (keyPos) {
+            var kpx = (keyPos.x - camera.x) * scale, kpy = (keyPos.y - camera.y) * scale;
+            if (Math.abs(kpx) <= range * scale + 10 && Math.abs(kpy) <= range * scale + 10) {
+                ctx.beginPath();
+                ctx.arc(kpx, kpy, 5, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffd700';
+                ctx.fill();
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+    }
+
     ctx.restore();  // removes clip + undoes translate/rotate
 
     // ---- Player icon: white triangle always pointing UP ----

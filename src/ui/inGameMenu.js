@@ -32,6 +32,8 @@ var InGameMenu = (function () {
 
         _open = true;
         _refresh();
+        var modeLabel = document.getElementById('ingame-mode-label');
+        if (modeLabel) modeLabel.style.display = (typeof gameMode !== 'undefined' && gameMode === 'nodewar') ? 'block' : 'none';
         var el = document.getElementById('ingame-menu');
         if (el) el.classList.add('open');
         if (document.pointerLockElement) document.exitPointerLock();
@@ -390,6 +392,65 @@ var InGameMenu = (function () {
                 ctx.textBaseline = 'middle';
                 ctx.fillText(name, bx + hs + 4, by);
             });
+        }
+
+        // ── Node War: facilities, Mainframe, Key ──────────────
+        if (gameMode === 'nodewar' && typeof nakamaState !== 'undefined' && nakamaState.nw) {
+            var nw = nakamaState.nw;
+            for (var nwi = 0; nwi < nw.nodes.length; nwi++) {
+                var nnode = nw.nodes[nwi];
+                var nnx = _wx2cx(nnode.x), nny = _wy2cy(nnode.y);
+                if (nnx < -20 || nnx > cw + 20 || nny < -20 || nny > ch + 20) continue;
+                var nColor = (nnode.status === 'active')
+                    ? (NW_HUD_FACTION_COLOR[nnode.team] || NW_HUD_FACTION_COLOR.neutral)
+                    : NW_HUD_FACTION_COLOR.neutral;
+                ctx.beginPath();
+                ctx.arc(nnx, nny, 6, 0, Math.PI * 2);
+                ctx.fillStyle = nColor;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+
+            var mfx = _wx2cx(0), mfy = _wy2cy(0);
+            if (mfx >= -20 && mfx <= cw + 20 && mfy >= -20 && mfy <= ch + 20) {
+                var mfOn = nw.mainframe && nw.mainframe.active;
+                ctx.beginPath();
+                ctx.moveTo(mfx, mfy - 7);
+                ctx.lineTo(mfx + 7, mfy + 6);
+                ctx.lineTo(mfx - 7, mfy + 6);
+                ctx.closePath();
+                ctx.fillStyle = mfOn ? '#ffd700' : 'rgba(180,180,190,0.65)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.font = '9px monospace';
+                ctx.fillStyle = '#e8d8b0';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('Mainframe', mfx + 10, mfy);
+            }
+
+            var keyPos = (typeof nwKeyWorldPos === 'function') ? nwKeyWorldPos() : null;
+            if (keyPos) {
+                var kpx = _wx2cx(keyPos.x), kpy = _wy2cy(keyPos.y);
+                if (kpx >= -20 && kpx <= cw + 20 && kpy >= -20 && kpy <= ch + 20) {
+                    ctx.beginPath();
+                    ctx.arc(kpx, kpy, 6, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ffd700';
+                    ctx.fill();
+                    ctx.strokeStyle = '#000000';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                    ctx.font = '9px monospace';
+                    ctx.fillStyle = '#ffd700';
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('Key', kpx + 10, kpy);
+                }
+            }
         }
 
         // ── Cardinal direction labels ────────────────────────
