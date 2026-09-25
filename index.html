@@ -247,7 +247,7 @@
         html, body {margin: 0; height: 100%; overflow: hidden; background: #000;}
 
         /* ── Interact prompt ── */
-        #interact-prompt {
+        #interact-prompt, #bike-prompt {
             position: fixed;
             bottom: 34%;
             left: 50%;
@@ -266,6 +266,22 @@
             display: none;
             animation: prompt-pulse 1.8s ease-in-out infinite;
             white-space: nowrap;
+        }
+        #bike-prompt { color: #42e8ff; border-color: rgba(66,232,255,0.55); }
+        #bike-status {
+            display: none;
+            position: fixed;
+            left: 50%;
+            bottom: 22%;
+            transform: translateX(-50%);
+            z-index: 200;
+            padding: 6px 12px;
+            background: rgba(5,10,18,0.82);
+            border: 1px solid rgba(66,232,255,0.55);
+            color: #8ff5ff;
+            font: bold 12px monospace;
+            white-space: nowrap;
+            pointer-events: none;
         }
 
         /* ── Node War: facility/Mainframe interaction ── */
@@ -963,6 +979,8 @@
 
 <!-- ── NPC interact prompt ── -->
 <div id="interact-prompt"></div>
+<div id="bike-prompt"></div>
+<div id="bike-status"></div>
 <!-- Node War: facility/Mainframe interaction -->
 <div id="nw-prompt"></div>
 <div id="nw-confirm">
@@ -1471,7 +1489,7 @@
 <!-- ===================================== -->
 <!-- src/ files - Entities                -->
 <!-- ===================================== -->
-<script src="src/entities/camera.js?v=9"></script>
+<script src="src/entities/camera.js?v=10"></script>
 <script src="src/entities/testTarget.js"></script>
 <script src="src/entities/items.js?v=4"></script>
 <script src="src/entities/enemy.js"></script>
@@ -1481,7 +1499,8 @@
 <script src="src/indoor/buildingRenderer.js?v=4"></script>
 <script src="src/indoor/buildingPlacer.js?v=1"></script>
 <script src="src/entities/nodeWarObjects.js?v=3"></script>
-<script src="src/entities/hoverBike.js?v=4"></script>
+<script src="src/entities/hoverBike.js?v=5"></script>
+<script src="src/entities/hoverBikeRide.js?v=1"></script>
 <script src="src/systems/nodeWarInteract.js?v=5"></script>
 <script src="src/ui/nodeWarHud.js?v=3"></script>
 <script src="quests/TestQuest.js"></script>
@@ -1507,7 +1526,7 @@
 <script src="src/ui/scoreboard.js"></script>
 <script src="src/ui/weaponUI.js"></script>
 <script src="src/ui/touchControls.js"></script>
-<script src="src/ui/inGameMenu.js?v=9"></script>
+<script src="src/ui/inGameMenu.js?v=10"></script>
 
 <!-- ===================================== -->
 <!-- src/ files - Input                   -->
@@ -1530,7 +1549,7 @@
 <!-- ===================================== -->
 <!-- src/ files - Main Entry Point        -->
 <!-- ===================================== -->
-<script src="src/main.js?v=19"></script>
+<script src="src/main.js?v=20"></script>
 
 <!-- ── Splash screen dismiss ── -->
 <script>

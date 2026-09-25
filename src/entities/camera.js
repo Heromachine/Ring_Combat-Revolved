@@ -195,7 +195,17 @@ var canMoveTo=(nx,ny)=>{
 function UpdateCamera(){
     // Freeze all player actions when dead — wait for server respawn
     if (player.health <= 0) {
+        if (typeof HoverBikeRide !== 'undefined' && HoverBikeRide.isMounted()) HoverBikeRide.dismount();
         time = Date.now(); // prevent deltaTime spike on respawn
+        return;
+    }
+
+    if (typeof HoverBikeRide !== 'undefined' && HoverBikeRide.isMounted()) {
+        var rideNow = Date.now();
+        HoverBikeRide.update((rideNow - time) / 1000);
+        time = rideNow;
+        document.getElementById('shieldinner').style.width = (player.shield / player.maxShield * 100) + '%';
+        document.getElementById('health').style.width = player.health + '%';
         return;
     }
 

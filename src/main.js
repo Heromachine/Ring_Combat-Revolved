@@ -149,6 +149,7 @@ var gameMode = 'freeplay'; // 'freeplay' | 'nodewar'
 
 function exitGame() {
     _loopActive = false;
+    if (typeof HoverBikeRide !== 'undefined') HoverBikeRide.reset();
     gameMode = 'freeplay';
     if (typeof Multiplayer !== 'undefined' && Multiplayer.isConnected()) {
         Multiplayer.disconnect();
@@ -169,6 +170,7 @@ function Draw(timestamp){
         pollGamepad();
         if (typeof updateTouchInput === 'function') updateTouchInput();
         UpdateCamera();
+        if (typeof HoverBikeRide !== 'undefined') HoverBikeRide.updatePrompt();
         // Keep chunks resident around the player and drip-feed generation.
         // Budget 1 chunk/frame: a chunk costs ~10 ms to build, so generating
         // several in one frame would stall visibly.
@@ -220,7 +222,7 @@ function Draw(timestamp){
         RenderTestTarget();
         if (!Multiplayer.isConnected()) DrawEnemyBars(screendata.context);
         RenderGroundWeapons();
-        RenderGunViewmodel(screendata.context);
+        if (typeof HoverBikeRide === 'undefined' || !HoverBikeRide.isMounted()) RenderGunViewmodel(screendata.context);
         RenderSniperScope();
         DrawMinimap();
         if (typeof DrawNodeWarHud === 'function') DrawNodeWarHud();
@@ -283,6 +285,7 @@ function Init(){
     initShadowCube();
     QuestManager.init();
     if (typeof NodeWarInteract !== 'undefined') NodeWarInteract.init();
+    if (typeof HoverBikeRide !== 'undefined') { HoverBikeRide.reset(); HoverBikeRide.init(); }
     if (typeof NodeWarWin !== 'undefined') NodeWarWin.init();
     InGameMenu.init();
 

@@ -326,7 +326,7 @@ var InGameMenu = (function () {
         }
 
         // ── Hover bike marker ──
-        if (typeof hoverBike !== 'undefined') {
+        if (typeof hoverBike !== 'undefined' && !hoverBike.destroyed) {
             var vbx = _wx2cx(hoverBike.x), vby = _wy2cy(hoverBike.y);
             if (vbx >= -28 && vbx <= cw + 28 && vby >= -28 && vby <= ch + 28) {
                 // Cyan target ring and a small forward-pointing bike glyph.

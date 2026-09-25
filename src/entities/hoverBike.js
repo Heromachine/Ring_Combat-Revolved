@@ -1,7 +1,7 @@
-// Static OBJ hover bike display near the default spawn. Model axes in speed-e.obj:
+// OBJ hover bike display near the default spawn. Model axes in speed-e.obj:
 // +X is the nose, +Y is up, and Z is lateral. Convert Y-up to game Z-up.
 "use strict";
-// Park beside the large blue test box so it is easy to find and not occluded
+// Park beside the large wood-textured box so it is easy to find and not occluded
 // by the box itself. Keep this anchored to the box if its location changes.
 var hoverBike = { x: cube.x + cube.size / 2 + 34, y: cube.y, scale: 10, loaded: false, faces: [], vertices: [], material: "Frame_|_charcoal" };
 var _bikeColors = {
@@ -22,14 +22,14 @@ fetch("3D_models/speed-e.obj").then(function(r){ if(!r.ok) throw Error("speed-e.
   hoverBike.vertices=vertices; hoverBike.faces=faces; hoverBike.loaded=vertices.length>0&&faces.length>0;
 }).catch(function(e){console.error("Hover bike model failed to load",e);});
 function RenderHoverBike(){
-  if(!hoverBike.loaded)return;
+  if(!hoverBike.loaded || hoverBike.destroyed)return;
   cubeSinYaw=Math.sin(camera.angle); cubeCosYaw=Math.cos(camera.angle);
   var s=hoverBike.scale, ground=getRawTerrainHeight(hoverBike.x,hoverBike.y)+8;
   var cs=Math.cos(hoverBike.yaw||0), sn=Math.sin(hoverBike.yaw||0);
   var world=hoverBike.vertices.map(function(v){
     var lx=(v[0]+0.095)*s, ly=(v[1]-0.09)*s, lz=v[2]*s;
-    // Nose (+model X) points toward the player's default spawn (negative Y).
-    var side=lz*cs+lx*sn, forward=lx*cs-lz*sn;
+    // Nose (+model X) follows hoverBike.yaw; yaw zero points toward world -Y.
+    var side=lz*cs-lx*sn, forward=lx*cs+lz*sn;
     return {x:hoverBike.x+side,y:hoverBike.y-forward,z:ground+ly};
   });
   // Keep the silhouette readable at pitch-black world night; light strips stay vivid.
