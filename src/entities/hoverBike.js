@@ -5,10 +5,10 @@
 // by the box itself. Keep this anchored to the box if its location changes.
 var hoverBike = { x: cube.x + cube.size / 2 + 34, y: cube.y, scale: 10, loaded: false, faces: [], vertices: [], material: "Frame_|_charcoal" };
 var _bikeColors = {
-  "Armor_|_lit_facets": [210, 145, 255], "Armor_|_shadow_facets": [105, 70, 140],
-  "Armor_|_violet": [175, 105, 230], "Cockpit_|_dark_upholstery": [75, 65, 90],
-  "Frame_|_charcoal": [105, 110, 130], "Frame_|_gunmetal": [145, 155, 180],
-  "Lights_|_electric_blue": [70, 190, 255], "Lights_|_violet_blue": [160, 115, 255]
+  "Armor_|_lit_facets": [255, 65, 220], "Armor_|_shadow_facets": [55, 90, 245],
+  "Armor_|_violet": [180, 35, 255], "Cockpit_|_dark_upholstery": [35, 15, 75],
+  "Frame_|_charcoal": [24, 32, 72], "Frame_|_gunmetal": [40, 205, 235],
+  "Lights_|_electric_blue": [0, 245, 255], "Lights_|_violet_blue": [255, 45, 190]
 };
 var _bikeTextures = {};
 fetch("3D_models/speed-e.obj").then(function(r){ if(!r.ok) throw Error("speed-e.obj HTTP "+r.status); return r.text(); }).then(function(src){
