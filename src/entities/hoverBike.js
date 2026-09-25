@@ -5,10 +5,10 @@
 // by the box itself. Keep this anchored to the box if its location changes.
 var hoverBike = { x: cube.x + cube.size / 2 + 34, y: cube.y, scale: 10, loaded: false, faces: [], vertices: [], material: "Frame_|_charcoal" };
 var _bikeColors = {
-  "Armor_|_lit_facets": [112, 74, 145], "Armor_|_shadow_facets": [48, 28, 66],
-  "Armor_|_violet": [86, 48, 120], "Cockpit_|_dark_upholstery": [24, 20, 29],
-  "Frame_|_charcoal": [34, 36, 46], "Frame_|_gunmetal": [62, 66, 78],
-  "Lights_|_electric_blue": [30, 126, 255], "Lights_|_violet_blue": [92, 55, 230]
+  "Armor_|_lit_facets": [210, 145, 255], "Armor_|_shadow_facets": [105, 70, 140],
+  "Armor_|_violet": [175, 105, 230], "Cockpit_|_dark_upholstery": [75, 65, 90],
+  "Frame_|_charcoal": [105, 110, 130], "Frame_|_gunmetal": [145, 155, 180],
+  "Lights_|_electric_blue": [70, 190, 255], "Lights_|_violet_blue": [160, 115, 255]
 };
 var _bikeTextures = {};
 fetch("3D_models/speed-e.obj").then(function(r){ if(!r.ok) throw Error("speed-e.obj HTTP "+r.status); return r.text(); }).then(function(src){
@@ -32,12 +32,14 @@ function RenderHoverBike(){
     var side=lz*cs+lx*sn, forward=lx*cs-lz*sn;
     return {x:hoverBike.x+side,y:hoverBike.y-forward,z:ground+ly};
   });
-  var night=(typeof DayNight!=="undefined")?DayNight.intensityAtY(hoverBike.y):1;
+  // Keep the silhouette readable at pitch-black world night; light strips stay vivid.
+  var night=(typeof DayNight!=="undefined")?Math.max(0.55,DayNight.intensityAtY(hoverBike.y)):1;
   hoverBike.faces.forEach(function(f){
     var rgb=_bikeColors[f.material]||[100,100,110], key=f.material;
     if(!_bikeTextures[key])_bikeTextures[key]=solidTex(packColor(rgb[0],rgb[1],rgb[2]));
     var pts=f.ids.map(function(id,i){var p=world[id];return {x:p.x,y:p.y,z:p.z,u:i===1?1:0,v:i===2?1:0};});
-    var shade=(f.material.indexOf("Lights_")===0?1.25:0.92)*night;
+    var isLight=f.material.indexOf("Lights_")===0;
+    var shade=(isLight?1.5:1.15)*(isLight?Math.max(0.85,night):night);
     _clipAndDraw(pts,shade,_bikeTextures[key]);
   });
 }
