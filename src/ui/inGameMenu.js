@@ -1,20 +1,20 @@
 // ===============================
 // In-Game Menu
 //
-// Tab key toggles this overlay. Contains three UI tabs:
-//   Menu        — Resume button + Quest Log (live quest states)
-//   Leaderboard — Player list with kills and ping
-//   Map         — Full world overview with player position
-//
-// To add items to the Menu tab, add HTML to #ingame-panel-menu in index.html
-// and wire up any logic here.
+// Tab / Start toggles this overlay. Triggers switch panels, bumpers switch
+// tabs, and the left stick browses display-only settings options.
 // ===============================
 "use strict";
 
 var InGameMenu = (function () {
 
     var _open            = false;
-    var _activeTab       = 'menu';
+    var _activePanel     = 'a';
+    var _activeTabs      = { a: 'controls', b: 'map' };
+    var _panelTabs       = { a: ['controls', 'video', 'audio'], b: ['map', 'leaderboard', 'quests'] };
+    var _padHeld         = { lt: false, rt: false, lb: false, rb: false };
+    var _stickYHeld      = 0;
+    var _nextStickMoveAt = 0;
     var _mapTerrainCache = null;
     var _mapCacheAt      = null;   // player position the windowed cache was built at   // cached ImageData of the world terrain (rebuilt on map load)
 
@@ -31,6 +31,7 @@ var InGameMenu = (function () {
         if (dlg && dlg.style.display === 'flex') return;
 
         _open = true;
+        _renderTabs();
         _refresh();
         var modeLabel = document.getElementById('ingame-mode-label');
         if (modeLabel) modeLabel.style.display = (typeof gameMode !== 'undefined' && gameMode === 'nodewar') ? 'block' : 'none';
@@ -46,6 +47,8 @@ var InGameMenu = (function () {
 
     function hide() {
         _open = false;
+        _stickYHeld = 0;
+        _nextStickMoveAt = 0;
         var el = document.getElementById('ingame-menu');
         if (el) el.classList.remove('open');
     }
@@ -56,20 +59,75 @@ var InGameMenu = (function () {
     function invalidateMapCache() { _mapTerrainCache = null; }
 
     // ─────────────────────────────────────────────────────────
-    // Tab switching
+    // Panel and tab switching
     // ─────────────────────────────────────────────────────────
     function _switchTab(tab) {
-        _activeTab = tab;
+        if (_panelTabs[_activePanel].indexOf(tab) < 0) return;
+        _activeTabs[_activePanel] = tab;
+        _renderTabs();
+        if (tab === 'map') _refreshMap();
+    }
+
+    function _renderTabs() {
+        var tab = _activeTabs[_activePanel];
+        var title = document.getElementById('ingame-panel-title');
+        if (title) title.textContent = _activePanel === 'a' ? 'Panel A · Main Menu' : 'Panel B · Field Intel';
+        document.querySelectorAll('.ingame-panel-switch-btn').forEach(function (btn) {
+            btn.classList.toggle('active', btn.dataset.panel === _activePanel);
+        });
         document.querySelectorAll('.ingame-tab').forEach(function (btn) {
+            btn.hidden = btn.dataset.panel !== _activePanel;
             btn.classList.toggle('active', btn.dataset.tab === tab);
         });
-        var menuPanel = document.getElementById('ingame-panel-menu');
-        var lbPanel   = document.getElementById('ingame-panel-leaderboard');
-        var mapPanel  = document.getElementById('ingame-panel-map');
-        if (menuPanel) menuPanel.style.display = tab === 'menu'        ? 'block' : 'none';
-        if (lbPanel)   lbPanel.style.display   = tab === 'leaderboard' ? 'block' : 'none';
-        if (mapPanel)  mapPanel.style.display  = tab === 'map'         ? 'flex'  : 'none';
-        if (tab === 'map') _refreshMap();
+        document.querySelectorAll('.ingame-panel').forEach(function (panel) {
+            panel.hidden = panel.id !== 'ingame-panel-' + tab;
+            if (!panel.hidden) panel.scrollTop = 0;
+        });
+    }
+
+    function _switchPanel(direction) {
+        _activePanel = direction > 0 ? 'b' : 'a';
+        _renderTabs();
+        if (_activeTabs[_activePanel] === 'map') _refreshMap();
+    }
+
+    function _stepTab(direction) {
+        var tabs = _panelTabs[_activePanel];
+        var next = Math.max(0, Math.min(tabs.length - 1, tabs.indexOf(_activeTabs[_activePanel]) + direction));
+        _switchTab(tabs[next]);
+    }
+
+    function _moveOption(direction) {
+        var panel = document.getElementById('ingame-panel-' + _activeTabs[_activePanel]);
+        if (!panel) return;
+        var options = panel.querySelectorAll('.ingame-option');
+        if (!options.length) {
+            panel.scrollTop += direction * 60;
+            return;
+        }
+        var current = Array.prototype.findIndex.call(options, function (option) { return option.classList.contains('selected'); });
+        var next = Math.max(0, Math.min(options.length - 1, current + direction));
+        options.forEach(function (option, index) { option.classList.toggle('selected', index === next); });
+        options[next].scrollIntoView({ block: 'nearest' });
+    }
+
+    function handleGamepad(gp) {
+        if (!_open || !gp) return;
+        function pressed(index) { return !!(gp.buttons[index] && (gp.buttons[index].pressed || gp.buttons[index].value > 0.5)); }
+        var now = { lt: pressed(6), rt: pressed(7), lb: pressed(4), rb: pressed(5) };
+        if (now.lt && !_padHeld.lt) _switchPanel(-1);
+        if (now.rt && !_padHeld.rt) _switchPanel(1);
+        if (now.lb && !_padHeld.lb) _stepTab(-1);
+        if (now.rb && !_padHeld.rb) _stepTab(1);
+        _padHeld = now;
+        var y = gp.axes[gamepad.axes.moveY] || 0;
+        var direction = y > 0.5 ? 1 : y < -0.5 ? -1 : 0;
+        var nowMs = Date.now();
+        if (direction && (direction !== _stickYHeld || nowMs >= _nextStickMoveAt)) {
+            _moveOption(direction);
+            _nextStickMoveAt = nowMs + (direction !== _stickYHeld ? 320 : 130);
+        }
+        _stickYHeld = direction;
     }
 
     // ─────────────────────────────────────────────────────────
@@ -78,7 +136,7 @@ var InGameMenu = (function () {
     function _refresh() {
         _refreshQuestLog();
         _refreshLeaderboard();
-        if (_activeTab === 'map') _refreshMap();
+        if (_activePanel === 'b' && _activeTabs.b === 'map') _refreshMap();
     }
 
     function _refreshQuestLog() {
@@ -538,6 +596,16 @@ var InGameMenu = (function () {
         document.querySelectorAll('.ingame-tab').forEach(function (btn) {
             btn.addEventListener('click', function () { _switchTab(btn.dataset.tab); });
         });
+        document.querySelectorAll('.ingame-panel-switch-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () { _switchPanel(btn.dataset.panel === 'b' ? 1 : -1); });
+        });
+        document.querySelectorAll('.ingame-option').forEach(function (option) {
+            option.addEventListener('click', function () {
+                option.parentElement.querySelectorAll('.ingame-option').forEach(function (row) {
+                    row.classList.toggle('selected', row === option);
+                });
+            });
+        });
 
         var resumeBtn = document.getElementById('ingame-resume');
         if (resumeBtn) resumeBtn.addEventListener('click', hide);
@@ -551,13 +619,18 @@ var InGameMenu = (function () {
         // Escape closes the menu (independent of dialog Escape handler)
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && _open) hide();
+            if (!_open) return;
+            if (e.key === 'ArrowLeft') { e.preventDefault(); _stepTab(-1); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); _stepTab(1); }
+            if (e.key === 'ArrowUp') { e.preventDefault(); _moveOption(-1); }
+            if (e.key === 'ArrowDown') { e.preventDefault(); _moveOption(1); }
         });
     }
 
     // ─────────────────────────────────────────────────────────
     return {
         toggle: toggle, show: show, hide: hide, isOpen: isOpen,
-        init: init, invalidateMapCache: invalidateMapCache,
+        init: init, invalidateMapCache: invalidateMapCache, handleGamepad: handleGamepad,
         refreshMap: _refreshMap   // exposed so the map view can be tested headlessly
     };
 

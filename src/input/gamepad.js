@@ -33,6 +33,27 @@ function pollGamepad(){
     gamepad.connected = true;
     var dz = gamepad.deadzone;
 
+    var btn = gp.buttons;
+    function isPressed(btnIndex){
+        return btn[btnIndex] && (btn[btnIndex].pressed || btn[btnIndex].value > 0.5);
+    }
+    var gpStart = isPressed(gamepad.buttons.start);
+    if(gpStart && !gamepad.prevStart && typeof InGameMenu !== 'undefined') InGameMenu.toggle();
+    gamepad.prevStart = gpStart;
+
+    if(typeof InGameMenu !== 'undefined' && InGameMenu.isOpen()){
+        InGameMenu.handleGamepad(gp);
+        input.moveX = input.moveY = input.lookX = input.lookY = 0;
+        input.gpShoot = input.gpAim = input.gpCrouch = input.gpSprint = false;
+        input.gpReload = input.gpJumpHeld = input.gpSwapWeapon = input.gpPickupWeapon = false;
+        input.prevGpAim = isPressed(gamepad.buttons.aim);
+        gamepad.prevActivate = isPressed(gamepad.buttons.activate);
+        gamepad.prevCancel = isPressed(gamepad.buttons.cancel);
+        gamepad.prevFlashlight = isPressed(gamepad.buttons.flashlight);
+        prevSwapButton = isPressed(gamepad.buttons.swapWeapon);
+        return;
+    }
+
     // Apply deadzone to axes
     function applyDeadzone(val){
         if(Math.abs(val) < dz) return 0;
@@ -46,14 +67,6 @@ function pollGamepad(){
     // Look (Right Stick)
     input.lookX = applyDeadzone(gp.axes[gamepad.axes.lookX] || 0);
     input.lookY = applyDeadzone(gp.axes[gamepad.axes.lookY] || 0);
-
-    // Buttons - read directly from gamepad
-    var btn = gp.buttons;
-
-    // Helper to check if a gamepad button is pressed
-    function isPressed(btnIndex){
-        return btn[btnIndex] && (btn[btnIndex].pressed || btn[btnIndex].value > 0.5);
-    }
 
     // Read current gamepad button states
     var gpJump = isPressed(gamepad.buttons.jump);
@@ -78,19 +91,6 @@ function pollGamepad(){
         if(typeof setEditMode==='function') setEditMode(input.aimToggled ? 'ads' : 'hip');
     }
     input.prevGpAim = gpAim;
-
-    // Start button - open the in-game menu, same as Tab on keyboard
-    // (edge detection: only on press). Previously called toggleDebugUI(),
-    // which pops the admin-only controls/debug panel -- unlike its keyboard
-    // equivalent (ESC, keyboard.js case 27), that call had no isAdmin guard,
-    // so any gamepad player could open admin-only UI. toggleDebugUI() is
-    // left defined below in case it is wired to a real admin-gated control
-    // later; it is just no longer reachable from Start.
-    var gpStart = isPressed(gamepad.buttons.start);
-    if(gpStart && !gamepad.prevStart){
-        if (typeof InGameMenu !== 'undefined') InGameMenu.toggle();
-    }
-    gamepad.prevStart = gpStart;
 
     // Y button - swap weapons (edge detection)
     var gpSwap = isPressed(gamepad.buttons.swapWeapon);
