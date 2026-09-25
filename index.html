@@ -572,6 +572,10 @@
         }
         .ingame-option.selected { border-color: rgba(80,160,220,0.7); background: rgba(80,140,200,0.18); color: #d8edfa; }
         .ingame-option-value { color: rgba(138,176,200,0.42); font-size: 0.67rem; text-transform: uppercase; letter-spacing: 1px; }
+        .ingame-control-slider { display: block; }
+        .ingame-control-slider-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .ingame-control-slider input[type="range"] { display: block; width: 100%; margin: 0; accent-color: #69acd6; cursor: pointer; }
+        .ingame-control-group-title { margin: 18px 0 10px; color: #c0d8e8; font-size: 0.7rem; letter-spacing: 1.5px; text-transform: uppercase; }
         .ingame-panel-note { color: rgba(138,176,200,0.45); font-size: 0.72rem; line-height: 1.5; margin: 0 0 18px; }
         #ingame-menu-footer { flex-shrink: 0; border-top: 1px solid rgba(80,160,220,0.15); padding: 12px 24px; }
         #ingame-menu-footer .ingame-action-row { margin: 0; }
@@ -1076,9 +1080,27 @@
     </div>
     <div id="ingame-panel-body">
     <div id="ingame-panel-controls" class="ingame-panel">
-      <p class="ingame-panel-note">Control settings preview. Use the left stick to browse.</p>
+      <p class="ingame-panel-note">Look sliders apply to mouse and right stick. Use the left stick to browse, then move it left or right to adjust.</p>
       <button class="ingame-option selected" type="button"><span>Movement</span><span class="ingame-option-value">Left Stick</span></button>
       <button class="ingame-option" type="button"><span>Look / Aim</span><span class="ingame-option-value">Right Stick</span></button>
+      <div class="ingame-control-group-title">Hip Fire</div>
+      <div class="ingame-option ingame-control-slider">
+        <div class="ingame-control-slider-header"><label for="ingame-look-hip-horizontal">Horizontal Look</label><span class="ingame-option-value" id="ingame-look-hip-horizontal-value">100%</span></div>
+        <input id="ingame-look-hip-horizontal" type="range" min="0.25" max="2" step="0.05" value="1" data-mode="hip" data-axis="horizontal">
+      </div>
+      <div class="ingame-option ingame-control-slider">
+        <div class="ingame-control-slider-header"><label for="ingame-look-hip-vertical">Vertical Look</label><span class="ingame-option-value" id="ingame-look-hip-vertical-value">100%</span></div>
+        <input id="ingame-look-hip-vertical" type="range" min="0.25" max="2" step="0.05" value="1" data-mode="hip" data-axis="vertical">
+      </div>
+      <div class="ingame-control-group-title">Iron Sights</div>
+      <div class="ingame-option ingame-control-slider">
+        <div class="ingame-control-slider-header"><label for="ingame-look-ads-horizontal">Horizontal Look</label><span class="ingame-option-value" id="ingame-look-ads-horizontal-value">100%</span></div>
+        <input id="ingame-look-ads-horizontal" type="range" min="0.25" max="2" step="0.05" value="1" data-mode="ads" data-axis="horizontal">
+      </div>
+      <div class="ingame-option ingame-control-slider">
+        <div class="ingame-control-slider-header"><label for="ingame-look-ads-vertical">Vertical Look</label><span class="ingame-option-value" id="ingame-look-ads-vertical-value">100%</span></div>
+        <input id="ingame-look-ads-vertical" type="range" min="0.25" max="2" step="0.05" value="1" data-mode="ads" data-axis="vertical">
+      </div>
       <button class="ingame-option" type="button"><span>Fire</span><span class="ingame-option-value">Right Trigger</span></button>
       <button class="ingame-option" type="button"><span>Interact</span><span class="ingame-option-value">A / F</span></button>
       <button class="ingame-option" type="button"><span>Menu Navigation</span><span class="ingame-option-value">Triggers / Bumpers</span></button>
@@ -1537,7 +1559,7 @@
 <!-- src/ files - Core Foundation         -->
 <!-- ===================================== -->
 <script src="src/core/polyfills.js"></script>
-<script src="src/core/globals.js?v=6"></script>
+<script src="src/core/globals.js?v=7"></script>
 <script src="src/core/configLoader.js"></script>
 
 <!-- ===================================== -->
@@ -1558,7 +1580,7 @@
 <!-- ===================================== -->
 <!-- src/ files - Entities                -->
 <!-- ===================================== -->
-<script src="src/entities/camera.js?v=11"></script>
+<script src="src/entities/camera.js?v=12"></script>
 <script src="src/entities/testTarget.js"></script>
 <script src="src/entities/items.js?v=4"></script>
 <script src="src/entities/enemy.js"></script>
@@ -1595,13 +1617,13 @@
 <script src="src/ui/scoreboard.js"></script>
 <script src="src/ui/weaponUI.js"></script>
 <script src="src/ui/touchControls.js"></script>
-<script src="src/ui/inGameMenu.js?v=11"></script>
+<script src="src/ui/inGameMenu.js?v=12"></script>
 
 <!-- ===================================== -->
 <!-- src/ files - Input                   -->
 <!-- ===================================== -->
 <script src="src/input/keyboard.js?v=11"></script>
-<script src="src/input/mouse.js?v=2"></script>
+<script src="src/input/mouse.js?v=3"></script>
 <script src="src/input/gamepad.js?v=5"></script>
 <script src="src/input/touch.js"></script>
 

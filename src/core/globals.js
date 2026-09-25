@@ -216,6 +216,10 @@ var debugUIVisible=true;  // Toggle with Start button
 var playerHeightOffset=70; // Player eye height above terrain
 var mouseSensitivity    = 0.002;  // Mouse hip look speed
 var mouseAdsSensitivity = 0.001;  // Mouse ADS look speed
+var lookAxisScale = {
+    hip: { horizontal: 1, vertical: 1 },
+    ads: { horizontal: 1, vertical: 1 }
+}; // In-game Controls sliders; applies to mouse and gamepad
 var bulletVertOffset=0;    // Vertical offset for bullet spawn (negative = below eye level)
 var bulletFwdOffset=0;     // Forward offset for bullet spawn (weapon distance from camera)
 var bulletHorizOffset=0;   // Horizontal offset for bullet spawn (left/right)

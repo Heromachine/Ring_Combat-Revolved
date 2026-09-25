@@ -208,9 +208,10 @@ function UpdateCamera(){
     // Gamepad look (Right Stick)
     if(input.lookX !== 0 || input.lookY !== 0){
         var gpSens = input.aimToggled ? gamepad.adsLookSensitivity : gamepad.lookSensitivity;
-        camera.angle = (camera.angle - input.lookX * gpSens) % (2 * Math.PI);
+        var axisScale = input.aimToggled ? lookAxisScale.ads : lookAxisScale.hip;
+        camera.angle = (camera.angle - input.lookX * gpSens * axisScale.horizontal) % (2 * Math.PI);
         if(camera.angle < 0) camera.angle += 2 * Math.PI;
-        camera.horizon = Math.max(-400, Math.min(600, camera.horizon - input.lookY * gpSens * 100));
+        camera.horizon = Math.max(-400, Math.min(600, camera.horizon - input.lookY * gpSens * 100 * axisScale.vertical));
     }
 
     if (riding) {

@@ -15,6 +15,8 @@ var InGameMenu = (function () {
     var _padHeld         = { lt: false, rt: false, lb: false, rb: false };
     var _stickYHeld      = 0;
     var _nextStickMoveAt = 0;
+    var _stickXHeld      = 0;
+    var _nextStickAdjustAt = 0;
     var _mapTerrainCache = null;
     var _mapCacheAt      = null;   // player position the windowed cache was built at   // cached ImageData of the world terrain (rebuilt on map load)
 
@@ -49,6 +51,8 @@ var InGameMenu = (function () {
         _open = false;
         _stickYHeld = 0;
         _nextStickMoveAt = 0;
+        _stickXHeld = 0;
+        _nextStickAdjustAt = 0;
         var el = document.getElementById('ingame-menu');
         if (el) el.classList.remove('open');
     }
@@ -111,6 +115,26 @@ var InGameMenu = (function () {
         options[next].scrollIntoView({ block: 'nearest' });
     }
 
+    function _setLookScale(slider, value) {
+        var mode = slider.dataset.mode;
+        var axis = slider.dataset.axis;
+        var clamped = Math.max(0.25, Math.min(2, Number(value)));
+        if (!Number.isFinite(clamped) || !lookAxisScale[mode] || !(axis in lookAxisScale[mode])) return;
+        lookAxisScale[mode][axis] = clamped;
+        slider.value = clamped;
+        var label = document.getElementById(slider.id + '-value');
+        if (label) label.textContent = Math.round(clamped * 100) + '%';
+        try { localStorage.setItem('ringLookAxisScale', JSON.stringify(lookAxisScale)); } catch (e) { /* Storage may be unavailable. */ }
+    }
+
+    function _adjustSelectedSlider(direction) {
+        var panel = document.getElementById('ingame-panel-' + _activeTabs[_activePanel]);
+        var slider = panel && panel.querySelector('.ingame-option.selected input[type="range"]');
+        if (!slider) return false;
+        _setLookScale(slider, Number(slider.value) + direction * Number(slider.step));
+        return true;
+    }
+
     function handleGamepad(gp) {
         if (!_open || !gp) return;
         function pressed(index) { return !!(gp.buttons[index] && (gp.buttons[index].pressed || gp.buttons[index].value > 0.5)); }
@@ -128,6 +152,13 @@ var InGameMenu = (function () {
             _nextStickMoveAt = nowMs + (direction !== _stickYHeld ? 320 : 130);
         }
         _stickYHeld = direction;
+        var x = gp.axes[gamepad.axes.moveX] || 0;
+        var horizontal = x > 0.5 ? 1 : x < -0.5 ? -1 : 0;
+        if (horizontal && (horizontal !== _stickXHeld || nowMs >= _nextStickAdjustAt)) {
+            _adjustSelectedSlider(horizontal);
+            _nextStickAdjustAt = nowMs + (horizontal !== _stickXHeld ? 320 : 130);
+        }
+        _stickXHeld = horizontal;
     }
 
     // ─────────────────────────────────────────────────────────
@@ -593,6 +624,22 @@ var InGameMenu = (function () {
     // init — bind buttons and keys
     // ─────────────────────────────────────────────────────────
     function init() {
+        try {
+            var savedLook = JSON.parse(localStorage.getItem('ringLookAxisScale'));
+            if (savedLook) {
+                ['hip', 'ads'].forEach(function (mode) {
+                    ['horizontal', 'vertical'].forEach(function (axis) {
+                        if (savedLook[mode] && Number.isFinite(Number(savedLook[mode][axis]))) {
+                            lookAxisScale[mode][axis] = Math.max(0.25, Math.min(2, Number(savedLook[mode][axis])));
+                        }
+                    });
+                });
+            }
+        } catch (e) { /* Use default look speeds if storage is unavailable. */ }
+        document.querySelectorAll('.ingame-control-slider input[type="range"]').forEach(function (slider) {
+            _setLookScale(slider, lookAxisScale[slider.dataset.mode][slider.dataset.axis]);
+            slider.addEventListener('input', function () { _setLookScale(slider, slider.value); });
+        });
         document.querySelectorAll('.ingame-tab').forEach(function (btn) {
             btn.addEventListener('click', function () { _switchTab(btn.dataset.tab); });
         });
@@ -620,8 +667,8 @@ var InGameMenu = (function () {
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && _open) hide();
             if (!_open) return;
-            if (e.key === 'ArrowLeft') { e.preventDefault(); _stepTab(-1); }
-            if (e.key === 'ArrowRight') { e.preventDefault(); _stepTab(1); }
+            if (e.key === 'ArrowLeft') { e.preventDefault(); if (!_adjustSelectedSlider(-1)) _stepTab(-1); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); if (!_adjustSelectedSlider(1)) _stepTab(1); }
             if (e.key === 'ArrowUp') { e.preventDefault(); _moveOption(-1); }
             if (e.key === 'ArrowDown') { e.preventDefault(); _moveOption(1); }
         });
