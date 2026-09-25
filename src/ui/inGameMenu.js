@@ -325,6 +325,45 @@ var InGameMenu = (function () {
             }
         }
 
+        // ── Hover bike marker ──
+        if (typeof hoverBike !== 'undefined') {
+            var vbx = _wx2cx(hoverBike.x), vby = _wy2cy(hoverBike.y);
+            if (vbx >= -28 && vbx <= cw + 28 && vby >= -28 && vby <= ch + 28) {
+                // Cyan target ring and a small forward-pointing bike glyph.
+                ctx.beginPath();
+                ctx.arc(vbx, vby, 9, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.55)';
+                ctx.fill();
+                ctx.strokeStyle = '#42e8ff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.save();
+                ctx.translate(vbx, vby);
+                ctx.rotate(0); // bike nose points toward world -Y (map up)
+                ctx.beginPath();
+                ctx.moveTo(0, -7);
+                ctx.lineTo(5, 5);
+                ctx.lineTo(0, 2);
+                ctx.lineTo(-5, 5);
+                ctx.closePath();
+                ctx.fillStyle = '#42e8ff';
+                ctx.fill();
+                ctx.strokeStyle = '#10252b';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.restore();
+
+                ctx.font = 'bold 10px monospace';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+                ctx.strokeText('HOVER BIKE', vbx + 12, vby);
+                ctx.fillStyle = '#8ff5ff';
+                ctx.fillText('HOVER BIKE', vbx + 12, vby);
+            }
+        }
+
         // ── NPC quest markers (only quests the player has spoken to) ──
         if (typeof QuestManager !== 'undefined' && QuestManager.getNpcMarkers) {
             var MARKER_COLOR = {

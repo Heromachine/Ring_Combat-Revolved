@@ -187,6 +187,7 @@ function Draw(timestamp){
         RenderCube();
         if (typeof RenderBuilding === 'function') RenderBuilding();
         if (typeof RenderNodeWarObjects === 'function') RenderNodeWarObjects();
+        if (typeof RenderHoverBike === 'function') RenderHoverBike();
         RenderGreenCube();
         RenderShadowCube();
         Render();
