@@ -222,7 +222,7 @@ function Draw(timestamp){
         RenderTestTarget();
         if (!Multiplayer.isConnected()) DrawEnemyBars(screendata.context);
         RenderGroundWeapons();
-        if (typeof HoverBikeRide === 'undefined' || !HoverBikeRide.isMounted()) RenderGunViewmodel(screendata.context);
+        RenderGunViewmodel(screendata.context);
         RenderSniperScope();
         DrawMinimap();
         if (typeof DrawNodeWarHud === 'function') DrawNodeWarHud();

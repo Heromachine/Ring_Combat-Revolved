@@ -55,7 +55,6 @@ var HoverBikeRide = (function () {
         camera.x = hoverBike.x;
         camera.y = hoverBike.y;
         camera.height = getRawTerrainHeight(hoverBike.x, hoverBike.y) + EYE_ABOVE_GROUND;
-        camera.angle = hoverBike.yaw;
         camera.velocityY = 0;
         camera.adsOffset = 0;
         camera.baseX = camera.x;
@@ -72,6 +71,7 @@ var HoverBikeRide = (function () {
         player.isChargingJump = false;
         player.jumpChargeTime = 0;
         placeRider();
+        camera.angle = hoverBike.yaw;
         time = Date.now();
     }
 
@@ -132,7 +132,9 @@ var HoverBikeRide = (function () {
         var speedRatio = Math.min(1, Math.abs(speed) / MAX_SPEED);
         if (Math.abs(speed) > 3) {
             var turnRate = 1.8 * (1 - 0.72 * speedRatio);
-            hoverBike.yaw -= steer * turnRate * dt * Math.sign(speed);
+            var yawDelta = -steer * turnRate * dt * Math.sign(speed);
+            hoverBike.yaw += yawDelta;
+            camera.angle = (camera.angle + yawDelta + 2 * Math.PI) % (2 * Math.PI);
         }
 
         var fx = -Math.sin(hoverBike.yaw), fy = -Math.cos(hoverBike.yaw);
@@ -176,7 +178,9 @@ var HoverBikeRide = (function () {
         var crashed = !mounted && hoverBike.destroyed && Date.now() < statusUntil;
         status.style.display = mounted || crashed ? 'block' : 'none';
         if (mounted) status.textContent = 'HOVER BIKE  ' + Math.round(Math.abs(speed)) + ' / ' + MAX_SPEED +
-            ' WU/s  |  LEFT STICK / WASD: DRIVE';
+            ' WU/s  |  ' + (gamepad.connected
+                ? 'LEFT STICK DRIVE · RIGHT STICK LOOK · RT FIRE'
+                : 'WASD DRIVE · MOUSE LOOK · CLICK FIRE');
         else if (crashed) status.textContent = 'HOVER BIKE DESTROYED — STEEP SLOPE IMPACT';
     }
 

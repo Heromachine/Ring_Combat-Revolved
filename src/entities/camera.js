@@ -200,18 +200,10 @@ function UpdateCamera(){
         return;
     }
 
-    if (typeof HoverBikeRide !== 'undefined' && HoverBikeRide.isMounted()) {
-        var rideNow = Date.now();
-        HoverBikeRide.update((rideNow - time) / 1000);
-        time = rideNow;
-        document.getElementById('shieldinner').style.width = (player.shield / player.maxShield * 100) + '%';
-        document.getElementById('health').style.width = player.health + '%';
-        return;
-    }
-
     var current=Date.now(),deltaTime=(current-time)*0.03,
         isSprinting = input.sprint || input.gpSprint,
         baseSpeed=player.moveSpeed*(isSprinting?player.sprintMultiplier:1)*deltaTime,nx,ny,slopeMult;
+    var riding = typeof HoverBikeRide !== 'undefined' && HoverBikeRide.isMounted();
 
     // Gamepad look (Right Stick)
     if(input.lookX !== 0 || input.lookY !== 0){
@@ -221,6 +213,15 @@ function UpdateCamera(){
         camera.horizon = Math.max(-400, Math.min(600, camera.horizon - input.lookY * gpSens * 100));
     }
 
+    if (riding) {
+        HoverBikeRide.update((current - time) / 1000);
+        _cameraHeightPrev = camera.height;
+        player.isCrouching = false;
+        player.isChargingJump = false;
+        player.jumpChargeTime = 0;
+        var ridingJumpBar = document.getElementById('jumpbar');
+        if (ridingJumpBar) ridingJumpBar.style.display = 'none';
+    } else {
     // Push player away from cube if too close (prevents camera clipping on rotation)
     pushAwayFromCube();
 
@@ -369,6 +370,8 @@ function UpdateCamera(){
         player.jumpChargeTime = 0;
         if(jumpBar) jumpBar.style.display = 'none';
         if(jumpCharge) jumpCharge.style.width = '0%';
+    }
+
     }
 
     // Weapon swap (Q key or Y button)
