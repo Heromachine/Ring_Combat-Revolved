@@ -3,38 +3,36 @@
 // ===============================
 "use strict";
 
-// The supplied PNG is a six-face cross: top above the second side face,
-// bottom below it, and four side faces across the middle row. Its source
-// faces are rectangular, so keep the actual row boundaries when sampling.
+// Sky 77 supplies six square cubemap faces. Its layout identifies PX as
+// front, NX as back, PZ/NZ as the horizontal sides, and PY/NY as up/down.
+// The side assignment below follows the matching image edges, keeping the
+// stars and horizon continuous when the camera turns.
 var NightSkybox = (function () {
-    var pixels = null, width = 0, height = 0;
+    var faces = {}, loaded = 0;
     if (typeof Image !== 'undefined') {
-        var image = new Image();
-        image.onload = function () {
-            var canvas = document.createElement('canvas');
-            canvas.width = image.naturalWidth;
-            canvas.height = image.naturalHeight;
-            var ctx = canvas.getContext('2d', { willReadFrequently: true });
-            if (!ctx) return;
-            ctx.drawImage(image, 0, 0);
-            try {
-                pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-                width = canvas.width;
-                height = canvas.height;
-            } catch (e) { console.warn('Night skybox could not be read', e); }
-        };
-        image.onerror = function () { console.warn('Night skybox image failed to load'); };
-        image.src = 'images/skybox.png';
+        ['px', 'nx', 'py', 'ny', 'pz', 'nz'].forEach(function (name) {
+            var image = new Image();
+            image.onload = function () {
+                var canvas = document.createElement('canvas');
+                canvas.width = image.naturalWidth;
+                canvas.height = image.naturalHeight;
+                var ctx = canvas.getContext('2d', { willReadFrequently: true });
+                if (!ctx) return;
+                ctx.drawImage(image, 0, 0);
+                try {
+                    faces[name] = { pixels: ctx.getImageData(0, 0, canvas.width, canvas.height).data,
+                                    width: canvas.width, height: canvas.height };
+                    loaded++;
+                } catch (e) { console.warn('Night skybox face could not be read: ' + name, e); }
+            };
+            image.onerror = function () { console.warn('Night skybox face failed to load: ' + name); };
+            image.src = 'images/sky77/' + name + '.png';
+        });
     }
 
     function draw(buffer, sw, sh, dayColor, nightMix) {
-        if (!pixels || nightMix <= 0) return false;
+        if (loaded !== 6 || nightMix <= 0) return false;
 
-        var faceW = width / 4;
-        var topEnd = Math.round(height * 292 / 1024);
-        var middleEnd = Math.round(height * 665 / 1024);
-        var middleH = middleEnd - topEnd;
-        var bottomH = height - middleEnd;
         var dayR = dayColor & 255, dayG = (dayColor >>> 8) & 255, dayB = (dayColor >>> 16) & 255;
         var dayMix = 1 - nightMix;
 
@@ -58,32 +56,29 @@ var NightSkybox = (function () {
                 var dy = fy + sx * ry + sy * uy;
                 var dz = fz + sy * uz;
                 var ax = Math.abs(dx), ay = Math.abs(dy), az = Math.abs(dz);
-                var face, u, v, faceY, faceH;
+                var face, u, v;
 
                 if (az >= ax && az >= ay) {
-                    face = 1;
-                    faceY = dz > 0 ? 0 : middleEnd;
-                    faceH = dz > 0 ? topEnd : bottomH;
-                    u = (1 + dx / az) * 0.5;
-                    v = (1 + (dz > 0 ? -dy : dy) / az) * 0.5;
+                    face = dz > 0 ? 'py' : 'ny';
+                    u = (1 - dy / az) * 0.5;
+                    v = (1 + (dz > 0 ? -dx : dx) / az) * 0.5;
                 } else if (ax >= ay) {
-                    faceY = topEnd; faceH = middleH;
-                    if (dx > 0) { face = 2; u = (1 + dy / ax) * 0.5; }
-                    else { face = 0; u = (1 - dy / ax) * 0.5; }
+                    if (dx > 0) { face = 'nz'; u = (1 + dy / ax) * 0.5; }
+                    else { face = 'pz'; u = (1 - dy / ax) * 0.5; }
                     v = (1 - dz / ax) * 0.5;
                 } else {
-                    faceY = topEnd; faceH = middleH;
-                    if (dy < 0) { face = 1; u = (1 + dx / ay) * 0.5; }
-                    else { face = 3; u = (1 - dx / ay) * 0.5; }
+                    if (dy < 0) { face = 'px'; u = (1 + dx / ay) * 0.5; }
+                    else { face = 'nx'; u = (1 - dx / ay) * 0.5; }
                     v = (1 - dz / ay) * 0.5;
                 }
 
-                var px = Math.min(faceW - 1, Math.max(0, Math.floor(u * faceW)));
-                var py = Math.min(faceH - 1, Math.max(0, Math.floor(v * faceH)));
-                var src = ((faceY + py) * width + face * faceW + px) * 4;
-                var r = (pixels[src] * nightMix + dayR * dayMix) | 0;
-                var g = (pixels[src + 1] * nightMix + dayG * dayMix) | 0;
-                var b = (pixels[src + 2] * nightMix + dayB * dayMix) | 0;
+                var image = faces[face];
+                var px = Math.min(image.width - 1, Math.max(0, Math.floor(u * image.width)));
+                var py = Math.min(image.height - 1, Math.max(0, Math.floor(v * image.height)));
+                var src = (py * image.width + px) * 4;
+                var r = (image.pixels[src] * nightMix + dayR * dayMix) | 0;
+                var g = (image.pixels[src + 1] * nightMix + dayG * dayMix) | 0;
+                var b = (image.pixels[src + 2] * nightMix + dayB * dayMix) | 0;
                 var color = (0xFF000000 | (b << 16) | (g << 8) | r) >>> 0;
                 for (var yy = y; yy < y + step && yy < sh; yy++) {
                     var row = yy * sw;
