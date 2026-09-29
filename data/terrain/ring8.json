@@ -1,0 +1,42 @@
+{
+  "generator": "terrain-diffusion",
+  "model": "xandergos/terrain-diffusion-30m",
+  "seed": 1337,
+  "metresPerPixel": 30.0,
+  "origin": [
+    -10240,
+    2048
+  ],
+  "length": 7168,
+  "width": 896,
+  "wrapsAlongLength": true,
+  "wrapBlend": 384,
+  "roll": 5544,
+  "elev": {
+    "file": "ring8.elev.i16",
+    "type": "int16le",
+    "units": "m",
+    "layout": "[width][length]"
+  },
+  "climate": {
+    "file": "ring8.climate.i16",
+    "type": "int16le",
+    "layout": "[channel][width/step][length/step]",
+    "step": 8,
+    "width": 112,
+    "length": 896,
+    "channels": [
+      "tempC*100",
+      "precipMm"
+    ]
+  },
+  "stats": {
+    "min": -2506.8662109375,
+    "max": 4327.7490234375,
+    "landFraction": 0.6312338381397481,
+    "landP50": 676.647705078125,
+    "landP99": 3461.691650390625,
+    "seaP5": -2202.302490234375
+  },
+  "command": "strip_export.py --length 7168 --width 896 --wrap-blend 384 --land 0.55,0.8 --seed 1337 --roll 5544"
+}

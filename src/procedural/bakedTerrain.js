@@ -1,7 +1,8 @@
 // ===============================
 // Baked terrain -- load an externally generated heightmap strip
 // ===============================
-// Fetches data/terrain/ring.json + its int16 elevation file (produced by
+// Fetches a strip's JSON (data/terrain/ring8.json by default) + its int16
+// elevation file (produced by
 // ~/terrain-diffusion-work/strip_export.py, a generic Terrain Diffusion strip
 // exporter) and hands it to WorldGen.useHeightmap(), which then replaces the
 // procedural biome field. Nothing else needs to know: every terrain consumer
@@ -18,18 +19,25 @@
 
 var BakedTerrain = (function () {
     var BASE = 'data/terrain/';
+    // Strips by resolution (world units per heightmap pixel). ?terrainRes=16
+    // picks the original coarser strip for comparison.
+    var STRIPS = { 8: 'ring8.json', 16: 'ring.json' };
+    var DEFAULT_RES = 8;
     var _state = 'idle';   // idle | loading | ready | off | failed
 
-    function _wanted() {
-        try { return new URLSearchParams(location.search).get('terrain') !== 'noise'; }
-        catch (e) { return true; }
+    function _param(name) {
+        try { return new URLSearchParams(location.search).get(name); }
+        catch (e) { return null; }
     }
+
+    function _wanted() { return _param('terrain') !== 'noise'; }
 
     function load() {
         if (!_wanted()) { _state = 'off'; return; }
         _state = 'loading';
-        fetch(BASE + 'ring.json').then(function (r) {
-            if (!r.ok) throw new Error('ring.json ' + r.status);
+        var file = STRIPS[_param('terrainRes')] || STRIPS[DEFAULT_RES];
+        fetch(BASE + file).then(function (r) {
+            if (!r.ok) throw new Error(file + ' ' + r.status);
             return r.json();
         }).then(function (meta) {
             return fetch(BASE + meta.elev.file).then(function (r) {

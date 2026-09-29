@@ -195,6 +195,7 @@ var WorldGen = (function () {
         }
 
         _computeSectors();
+        _hm = null;   // a baked heightmap's relief pass depends on the ring length
         for (var i = 0; i < BIOME_DEFS.length; i++) _calibrateBiome(BIOME_DEFS[i], i);
     }
 
@@ -324,7 +325,9 @@ var WorldGen = (function () {
     // (the far-side LOD, chunk lattice), without changing the large-scale shape.
     function heightAtWorld(x, y, detail) {
         var yy = ((y % _L) + _L) % _L;
-        var h = _hm ? _bakedHeight(x, yy) : _proceduralHeight(x, y, yy, detail);
+        var h;
+        if (_hmSrc) { if (!_hm) _buildHm(); h = _bakedHeight(x, yy); }
+        else h = _proceduralHeight(x, y, yy, detail);
 
         // Rim wall: the band has edges across X, orthogonal to biomes/moat
         // (which are Y-only), so this composes safely on top of either --
@@ -432,7 +435,7 @@ var WorldGen = (function () {
     // 1 = no exaggeration. ?hmDetail=N and ?hmDown=N override.
     cfg.hmDetail = 6;
     cfg.hmDetailDown = 1;
-    cfg.hmDetailRadius = 24;
+    cfg.hmDetailRadiusWU = 384;   // broad-shape blur radius, world units
     try {
         var _q = new URLSearchParams(location.search);
         var _qk = _q.get('hmKnee'), _qd = _q.get('hmDetail'), _qn = _q.get('hmDown');
@@ -441,43 +444,49 @@ var WorldGen = (function () {
         if (_qd !== null && parseFloat(_qd) > 0) cfg.hmDetail = parseFloat(_qd);
     } catch (e) { /* headless */ }
 
-    // Two passes of a box blur along each axis (close to a Gaussian). Wraps
-    // along the strip's length (it loops), clamps across its width.
-    function _blurWrapRows(src, w, h, r) {
+    // Two passes of a box blur along each axis (close to a Gaussian), in
+    // place in `buf`, using `tmp` (same size) as scratch. Wraps along the
+    // strip's length (it loops), clamps across its width.
+    function _blurWrapRows(buf, tmp, w, h, r) {
         var n = 2 * r + 1, inv = 1 / n, x, y, s, row, add, sub, pass;
-        var cur = src, tmp = new Float32Array(src.length), out;
         var colSum = new Float64Array(w);
         for (pass = 0; pass < 2; pass++) {
             for (y = 0; y < h; y++) {           // along length: wraps
                 row = y * w; s = 0;
-                for (x = w - r; x < w; x++) s += cur[row + x];
-                for (x = 0; x <= r; x++) s += cur[row + x];
-                add = r + 1; sub = w - r;
+                for (x = w - r; x < w; x++) s += buf[row + ((x % w) + w) % w];
+                for (x = 0; x <= r; x++) s += buf[row + (x % w)];
+                add = (r + 1) % w; sub = ((w - r) % w + w) % w;
                 for (x = 0; x < w; x++) {
                     tmp[row + x] = s * inv;
-                    s += cur[row + add] - cur[row + sub];
+                    s += buf[row + add] - buf[row + sub];
                     if (++add === w) add = 0;
                     if (++sub === w) sub = 0;
                 }
             }
-            out = new Float32Array(src.length);  // across width: clamps
-            for (x = 0; x < w; x++) colSum[x] = tmp[x] * (r + 1);
+            for (x = 0; x < w; x++) colSum[x] = tmp[x] * (r + 1);   // across width: clamps
             for (y = 1; y <= r; y++) { row = Math.min(h - 1, y) * w; for (x = 0; x < w; x++) colSum[x] += tmp[row + x]; }
             for (y = 0; y < h; y++) {
                 row = y * w;
                 var ra = Math.min(h - 1, y + r + 1) * w, rs = Math.max(0, y - r) * w;
                 for (x = 0; x < w; x++) {
-                    out[row + x] = colSum[x] * inv;
+                    buf[row + x] = colSum[x] * inv;
                     colSum[x] += tmp[ra + x] - tmp[rs + x];
                 }
             }
-            cur = out;
         }
-        return cur;
     }
 
+    // Store the strip; it is processed into heights lazily (_buildHm) on
+    // first use, because the relief pass needs the ring length, which may
+    // not be configured yet when the download lands.
+    var _hmSrc = null;
     function useHeightmap(meta, elev, opts) {
-        opts = opts || {};
+        _hmSrc = { meta: meta, elev: elev, opts: opts || {} };
+        _hm = null;
+    }
+
+    function _buildHm() {
+        var meta = _hmSrc.meta, elev = _hmSrc.elev, opts = _hmSrc.opts;
         var st = meta.stats || {};
         var landTop = opts.landTop || 200;
         var seaDepth = opts.seaDepth || 20;
@@ -490,29 +499,55 @@ var WorldGen = (function () {
         var denom = knee > 0 ? Math.log(1 + p99 / knee) : p99;
 
         // 1. metres -> height units (land curve, sea depth)
-        var u = new Float32Array(N), land = new Float32Array(N), i;
+        var u = new Float32Array(N), i;
         for (i = 0; i < N; i++) {
             var m = elev[i];
-            if (m >= 0) {
-                u[i] = s + (knee > 0 ? Math.log(1 + m / knee) : m) / denom * (landTop - s);
-                land[i] = 1;
-            } else {
-                u[i] = s - seaDepth * Math.min(1, -m / p5);
-            }
+            u[i] = m >= 0
+                ? s + (knee > 0 ? Math.log(1 + m / knee) : m) / denom * (landTop - s)
+                : s - seaDepth * Math.min(1, -m / p5);
         }
 
         // 2. amplify local land relief around a land-only broad shape, so the
-        //    sea never drags a coast's baseline down into a cliff
+        //    sea never drags a coast's baseline down into a cliff. The broad
+        //    shape is smooth by definition, so it is computed on a grid k
+        //    times coarser (k divides the length so the wrap stays exact) and
+        //    sampled back bilinearly -- k^2 less memory and time at load.
         if (gain !== 1) {
-            var lu = new Float32Array(N);
-            for (i = 0; i < N; i++) lu[i] = u[i] * land[i];
-            var num = _blurWrapRows(lu, w, hgt, cfg.hmDetailRadius);
-            var den = _blurWrapRows(land, w, hgt, cfg.hmDetailRadius);
-            for (i = 0; i < N; i++) {
-                if (!land[i] || den[i] <= 0) continue;
-                var base = num[i] / den[i], d = u[i] - base;
-                var h2 = base + d * (d > 0 ? gain : Math.min(gain, gainDown));
-                u[i] = h2 > s + 0.5 ? h2 : s + 0.5;   // land stays land
+            var wuPerPx = _L / w;
+            var rPx = Math.max(1, Math.round(cfg.hmDetailRadiusWU / wuPerPx));
+            var k = Math.max(1, Math.floor(rPx / 12));
+            while (k > 1 && w % k) k--;
+            var cw = w / k, ch = Math.ceil(hgt / k), CN = cw * ch;
+            var num = new Float32Array(CN), den = new Float32Array(CN), tmp = new Float32Array(CN);
+            for (var yy = 0; yy < hgt; yy++) {
+                var crow = ((yy / k) | 0) * cw, row = yy * w;
+                for (var xx = 0; xx < w; xx++) {
+                    if (elev[row + xx] < 0) continue;
+                    var ci = crow + ((xx / k) | 0);
+                    num[ci] += u[row + xx]; den[ci] += 1;
+                }
+            }
+            var cr = Math.max(1, Math.round(rPx / k));
+            _blurWrapRows(num, tmp, cw, ch, cr);
+            _blurWrapRows(den, tmp, cw, ch, cr);
+            for (i = 0; i < CN; i++) num[i] = den[i] > 1e-6 ? num[i] / den[i] : s;
+
+            for (yy = 0; yy < hgt; yy++) {
+                var fy = (yy + 0.5) / k - 0.5; if (fy < 0) fy = 0; if (fy > ch - 1) fy = ch - 1;
+                var y0 = fy | 0, y1 = y0 + 1 < ch ? y0 + 1 : y0, ty = fy - y0;
+                row = yy * w;
+                for (xx = 0; xx < w; xx++) {
+                    i = row + xx;
+                    if (elev[i] < 0) continue;
+                    var fx = (xx + 0.5) / k - 0.5; if (fx < 0) fx += cw;
+                    var x0 = fx | 0, tx = fx - x0, x1 = x0 + 1; if (x1 >= cw) x1 -= cw;
+                    var a0 = num[y0 * cw + x0], a1 = num[y0 * cw + x1];
+                    var b0 = num[y1 * cw + x0], b1 = num[y1 * cw + x1];
+                    var base = (a0 + (a1 - a0) * tx) + ((b0 + (b1 - b0) * tx) - (a0 + (a1 - a0) * tx)) * ty;
+                    var d = u[i] - base;
+                    var h2 = base + d * (d > 0 ? gain : Math.min(gain, gainDown));
+                    u[i] = h2 > s + 0.5 ? h2 : s + 0.5;   // land stays land
+                }
             }
         }
 
@@ -523,8 +558,8 @@ var WorldGen = (function () {
         }
         _hm = { len: w, wid: hgt, h: u, landTop: landTop };
     }
-    function clearHeightmap() { _hm = null; }
-    function usingHeightmap() { return !!_hm; }
+    function clearHeightmap() { _hmSrc = null; _hm = null; }
+    function usingHeightmap() { return !!_hmSrc; }
 
     function _hmAt(r, c) {
         return _hm.h[r * _hm.len + c];
@@ -571,10 +606,10 @@ var WorldGen = (function () {
         else {
             // A baked heightmap has no biomes: one palette over its own range.
             var bd = BIOME_DEFS[bidx] || BIOME_DEFS[0];
-            var top = _hm ? _hm.landTop : bd.maxHeight;
+            var top = _hmSrc ? (_hmSrc.opts.landTop || 200) : bd.maxHeight;
             var t = (top - s) > 0 ? (h - (s + 4)) / (top - (s + 4)) : 0;
             if (t < 0) t = 0; else if (t > 1) t = 1;
-            var bands = _hm ? HM_COLORS : bd.colors, picked = bands[bands.length - 1];
+            var bands = _hmSrc ? HM_COLORS : bd.colors, picked = bands[bands.length - 1];
             for (var i = 0; i < bands.length; i++) { if (t <= bands[i].t) { picked = bands[i]; break; } }
             r = picked.r; g = picked.g; b = picked.b;
         }
