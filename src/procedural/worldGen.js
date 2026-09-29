@@ -409,9 +409,26 @@ var WorldGen = (function () {
         { t: 0.46, r: 102, g: 112, b: 70  },
         { t: 0.64, r: 122, g: 112, b: 94  },
         { t: 0.82, r: 142, g: 138, b: 132 },
-        { t: 1.00, r: 236, g: 238, b: 242 }
+        { t: 1.00, r: 166, g: 162, b: 156 }
     ];
     var _hm = null;
+
+    // ---- Materials ----
+    // Colour is height-keyed, but snow must not be: the relief pass
+    // exaggerates hills in GAME height, so a height-keyed snow band put ice
+    // caps on 600 m hills. Snow is instead a per-texel material decided by
+    // the strip's REAL elevation in metres (above cfg.snowlineM, with a
+    // ragged edge), so hmDetail can raise hills without whitening them.
+    // Material 0 = the normal height palette, 1 = snow. Only a baked
+    // heightmap has materials; the procedural world is always 0.
+    var MAT_SNOW = 1;
+    var SNOW_COLOR = { r: 236, g: 238, b: 242 };
+    cfg.snowlineM = 2800;
+    cfg.snowEdgeM = 150;   // +- ragged-edge dither around the snowline
+    try {
+        var _qs = parseFloat(new URLSearchParams(location.search).get('snowline'));
+        if (_qs > 0) cfg.snowlineM = _qs;
+    } catch (e) { /* headless */ }
 
     // Land curve: log(1 + m/knee), scaled so the strip's P99 lands on
     // landTop. A straight metres->units line squashes relief ~10x against the
@@ -581,6 +598,59 @@ var WorldGen = (function () {
         return top + (bot - top) * tr;
     }
 
+    // Real elevation in metres at a world position (bilinear over the raw
+    // strip, wraps along Y), or null when no heightmap is loaded.
+    function metresAtWorld(x, y) {
+        if (!_hmSrc) return null;
+        var meta = _hmSrc.meta, e = _hmSrc.elev, len = meta.length, wid = meta.width;
+        var yy = ((y % _L) + _L) % _L;
+        var fr = (x + cfg.bandHalfWidth) / (2 * cfg.bandHalfWidth) * (wid - 1);
+        if (fr < 0) fr = 0; else if (fr > wid - 1) fr = wid - 1;
+        var fc = yy / _L * len;
+        var r0 = fr | 0, c0 = (fc | 0) % len, tr = fr - (fr | 0), tc = fc - (fc | 0);
+        var r1 = r0 + 1 < wid ? r0 + 1 : r0, c1 = (c0 + 1) % len;
+        var a = e[r0 * len + c0], b = e[r0 * len + c1], c = e[r1 * len + c0], d = e[r1 * len + c1];
+        var top = a + (b - a) * tc, bot = c + (d - c) * tc;
+        return top + (bot - top) * tr;
+    }
+
+    // Snowline edge: smooth value noise, roughly [-0.5, 0.5), two octaves
+    // (48 and 12 WU). Per-texel hashing read as salt-and-pepper speckle;
+    // a coherent field gives a wavy, patchy edge instead. Only evaluated
+    // near the snowline (chunkTerrain skips cells clear of it).
+    function _cellHash(ix, iy) {
+        var h = (Math.imul(ix, 668265263) ^ Math.imul(iy, 374761393) ^ Math.imul(cfg.seed | 0, 2246822519)) | 0;
+        h = Math.imul(h ^ (h >>> 13), 1274126177) | 0;
+        return ((h >>> 8) & 0xFFFF) / 0x10000 - 0.5;
+    }
+    function _valueNoise(x, y, cell) {
+        var fx = x / cell, fy = y / cell;
+        var ix = Math.floor(fx), iy = Math.floor(fy);
+        var tx = fx - ix, ty = fy - iy;
+        tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+        var a = _cellHash(ix, iy), b = _cellHash(ix + 1, iy);
+        var c = _cellHash(ix, iy + 1), d = _cellHash(ix + 1, iy + 1);
+        var top = a + (b - a) * tx;
+        return top + ((c + (d - c) * tx) - top) * ty;
+    }
+    function _edgeHash(x, y) {
+        // Stretched for contrast, then clamped to [-0.5, 0.5] -- chunkTerrain's
+        // early-outs assume the edge never reaches past snowline +- snowEdgeM.
+        var n = (_valueNoise(x, y, 48) * 0.7 + _valueNoise(x, y, 12) * 0.3) * 1.6;
+        return n < -0.5 ? -0.5 : (n > 0.5 ? 0.5 : n);
+    }
+
+    // Material from real elevation in metres (see MAT_SNOW). Callers that
+    // already have the metres (chunk generation, interpolating a lattice)
+    // use this directly; materialAtWorld samples them itself.
+    function materialForMetres(m, x, y) {
+        if (m === null || m <= 0) return 0;
+        return (m + _edgeHash(x, y) * 2 * cfg.snowEdgeM > cfg.snowlineM) ? MAT_SNOW : 0;
+    }
+    function materialAtWorld(x, y) {
+        return _hmSrc ? materialForMetres(metresAtWorld(x, y), x, y) : 0;
+    }
+
     // True where the player can actually stand -- inside the rim wall.
     function insideBand(x) {
         return Math.abs(x) <= cfg.bandHalfWidth - cfg.wallRamp;
@@ -589,7 +659,7 @@ var WorldGen = (function () {
     // Packed ABGR colour for a height IN A GIVEN BIOME. Water bands (below
     // and just above seaLevel) are shared across every biome so moats and
     // lakes read as "water" everywhere; only the land bands are per-biome.
-    function colorForHeightBiome(h, bidx) {
+    function colorForHeightBiome(h, bidx, mat) {
         var s = cfg.seaLevel;
         var r, g, b;
 
@@ -602,6 +672,7 @@ var WorldGen = (function () {
         if (h <= s - 12)      { r = 18;  g = 42;  b = 78;  }
         else if (h <= s - 5)  { r = 26;  g = 58;  b = 99;  }
         else if (h <= s)      { r = 40;  g = 84;  b = 128; }
+        else if (mat === MAT_SNOW) { r = SNOW_COLOR.r; g = SNOW_COLOR.g; b = SNOW_COLOR.b; }
         else if (h < s + 4)   { r = 186; g = 176; b = 128; }
         else {
             // A baked heightmap has no biomes: one palette over its own range.
@@ -634,6 +705,9 @@ var WorldGen = (function () {
         biomeCount:          biomeCount,
         biomeName:           biomeName,
         useHeightmap:        useHeightmap,
+        metresAtWorld:       metresAtWorld,
+        materialForMetres:   materialForMetres,
+        materialAtWorld:     materialAtWorld,
         clearHeightmap:      clearHeightmap,
         usingHeightmap:      usingHeightmap,
         config:              cfg

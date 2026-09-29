@@ -183,7 +183,8 @@ function buildRingNoiseLOD() {
             var h = WorldGen.heightAtWorld(wx, wy, 0.5);   // reduced octaves
             var o = j * C + i;
             hgt[o] = h;
-            col[o] = WorldGen.colorForHeightBiome(h, bio);
+            col[o] = WorldGen.colorForHeightBiome(h, bio,
+                WorldGen.materialAtWorld ? WorldGen.materialAtWorld(wx, wy) : 0);
         }
     }
     ringMip = { procedural: true, around: A, across: C, dy: dy, dx: dx,

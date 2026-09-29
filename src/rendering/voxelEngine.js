@@ -88,15 +88,18 @@ function Render(){
                     _lastLut=_hit ? ChunkTerrain.litLUT(_cBiomes[_sl], _cy<<_cShift) : null;
                     _lastRawLut=_hit ? _rawLuts[_cBiomes[_sl]] : null;
                 }
-                _alt=_lastChunk ? _lastChunk[((_fy&_cMask)<<_cShift)+(_fx&_cMask)]
-                                : ChunkTerrain.heightAt(plx,ply);
+                // Texel = height (low byte) | material << 8; the LUT is
+                // indexed by the whole texel, height alone is the low byte.
+                var _tex=_lastChunk ? _lastChunk[((_fy&_cMask)<<_cShift)+(_fx&_cMask)]
+                                    : ChunkTerrain.heightAt(plx,ply);
+                _alt=_tex&255;
                 // Miss (chunk not resident): biome must be looked up directly
                 // since there is no stored chunk to read it from. Misses are
                 // already the expensive path (a full function call above);
                 // one more cheap lookup here does not change that.
-                if(_lastLut){ _col=_lastLut[_alt]; _curRawLut=_lastRawLut; }
+                if(_lastLut){ _col=_lastLut[_tex]; _curRawLut=_lastRawLut; }
                 else { var _bm=WorldGen.biomeIndexAt(ply); _col=ChunkTerrain.litLUT(_bm, ply)[_alt]; _curRawLut=_rawLuts[_bm]; }
-                _colAlt=_alt;   // pre-bend height: the LUT index, before the ring bend below changes _alt
+                _colAlt=_lastLut ? _tex : _alt;   // pre-bend LUT index, before the ring bend below changes _alt
             } else {
                 var mapoffset=Terrain.indexAt(plx,ply);
                 _alt=terrainAlt[mapoffset];
