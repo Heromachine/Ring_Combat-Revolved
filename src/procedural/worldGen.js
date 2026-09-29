@@ -424,12 +424,19 @@ var WorldGen = (function () {
     // hmDetailRadius px -- ~1.4 km of real terrain) and the local detail on
     // top of it, and only the detail is multiplied. Coastlines, valleys and
     // the mountain range stay where the generator put them; hills get tall.
-    // 1 = no exaggeration. ?hmDetail=N overrides.
-    cfg.hmDetail = 4;
+    // Hills (detail above the broad shape) get hmDetail; valleys get the
+    // much gentler hmDetailDown. Deepening valleys by the full gain drove
+    // them onto the waterline -- at 6x, 12.6% of all land sat within 1.5
+    // units of sea level, reading as sand plains on the map and as a
+    // water/sand speckle in the chunks. At 1 it is 2.2% (unexaggerated: 1%).
+    // 1 = no exaggeration. ?hmDetail=N and ?hmDown=N override.
+    cfg.hmDetail = 6;
+    cfg.hmDetailDown = 1;
     cfg.hmDetailRadius = 24;
     try {
         var _q = new URLSearchParams(location.search);
-        var _qk = _q.get('hmKnee'), _qd = _q.get('hmDetail');
+        var _qk = _q.get('hmKnee'), _qd = _q.get('hmDetail'), _qn = _q.get('hmDown');
+        if (_qn !== null && parseFloat(_qn) > 0) cfg.hmDetailDown = parseFloat(_qn);
         if (_qk !== null && parseFloat(_qk) >= 0) cfg.hmKnee = parseFloat(_qk);
         if (_qd !== null && parseFloat(_qd) > 0) cfg.hmDetail = parseFloat(_qd);
     } catch (e) { /* headless */ }
@@ -476,6 +483,7 @@ var WorldGen = (function () {
         var seaDepth = opts.seaDepth || 20;
         var knee = opts.knee !== undefined ? opts.knee : cfg.hmKnee;
         var gain = opts.detail !== undefined ? opts.detail : cfg.hmDetail;
+        var gainDown = opts.detailDown !== undefined ? opts.detailDown : cfg.hmDetailDown;
         var p99 = Math.max(1, st.landP99 || 1), p5 = Math.max(1, -(st.seaP5 || -1));
         var room = cfg.wallColorFrom - 1 - landTop;
         var w = meta.length, hgt = meta.width, N = w * hgt, s = cfg.seaLevel;
@@ -502,8 +510,8 @@ var WorldGen = (function () {
             var den = _blurWrapRows(land, w, hgt, cfg.hmDetailRadius);
             for (i = 0; i < N; i++) {
                 if (!land[i] || den[i] <= 0) continue;
-                var base = num[i] / den[i];
-                var h2 = base + (u[i] - base) * gain;
+                var base = num[i] / den[i], d = u[i] - base;
+                var h2 = base + d * (d > 0 ? gain : Math.min(gain, gainDown));
                 u[i] = h2 > s + 0.5 ? h2 : s + 0.5;   // land stays land
             }
         }
