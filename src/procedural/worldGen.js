@@ -324,6 +324,27 @@ var WorldGen = (function () {
     // (the far-side LOD, chunk lattice), without changing the large-scale shape.
     function heightAtWorld(x, y, detail) {
         var yy = ((y % _L) + _L) % _L;
+        var h = _hm ? _bakedHeight(x, yy) : _proceduralHeight(x, y, yy, detail);
+
+        // Rim wall: the band has edges across X, orthogonal to biomes/moat
+        // (which are Y-only), so this composes safely on top of either --
+        // and on top of a baked heightmap too.
+        if (cfg.edgeWall) {
+            var ax = Math.abs(x);
+            var inner = cfg.bandHalfWidth - cfg.wallRamp;
+            if (ax > inner) {
+                var wt = (ax - inner) / cfg.wallRamp;
+                if (wt > 1) wt = 1;
+                wt = wt * wt * (3 - 2 * wt);
+                h = h + (cfg.wallTop - h) * wt;
+            }
+        }
+        return h;
+    }
+
+    // The noise + biomes + lakes + moat field. Untouched by the baked
+    // heightmap path; it is what runs whenever no heightmap is loaded.
+    function _proceduralHeight(x, y, yy, detail) {
         var bidx = _sectorIndex(yy);
         var bd = BIOME_DEFS[bidx];
         var oct = Math.max(1, Math.round((detail === undefined ? 1 : detail) * cfg.octaves));
@@ -363,20 +384,76 @@ var WorldGen = (function () {
                 h = h + (moatH - h) * mt;
             }
         }
-
-        // Rim wall: the band has edges across X, orthogonal to biomes/moat
-        // (which are Y-only), so this composes safely on top of either.
-        if (cfg.edgeWall) {
-            var ax = Math.abs(x);
-            var inner = cfg.bandHalfWidth - cfg.wallRamp;
-            if (ax > inner) {
-                var wt = (ax - inner) / cfg.wallRamp;
-                if (wt > 1) wt = 1;
-                wt = wt * wt * (3 - 2 * wt);
-                h = h + (cfg.wallTop - h) * wt;
-            }
-        }
         return h;
+    }
+
+    // ---- Baked heightmap ----
+    //
+    // An externally generated strip of real elevations (metres) -- e.g. a
+    // Terrain Diffusion export -- stretched over the whole band: rows span X
+    // from -bandHalfWidth to +bandHalfWidth, columns span one lap of Y and
+    // wrap. When one is loaded it REPLACES the procedural field above (no
+    // biomes, lakes or moats -- the heightmap carries its own water); the rim
+    // wall still applies. clearHeightmap() returns to the procedural world.
+    //
+    // Metres -> height units: sea level (0 m) sits at cfg.seaLevel, the
+    // strip's 99th-percentile land elevation maps to hmLandTop, and the 5th
+    // percentile sea depth maps to hmSeaDepth below sea level. Linear, so the
+    // relief keeps the shape the generator gave it.
+    var HM_COLORS = [
+        { t: 0.10, r: 118, g: 150, b: 74  },
+        { t: 0.28, r: 84,  g: 124, b: 56  },
+        { t: 0.46, r: 102, g: 112, b: 70  },
+        { t: 0.64, r: 122, g: 112, b: 94  },
+        { t: 0.82, r: 142, g: 138, b: 132 },
+        { t: 1.00, r: 236, g: 238, b: 242 }
+    ];
+    var _hm = null;
+
+    function useHeightmap(meta, elev, opts) {
+        opts = opts || {};
+        var st = meta.stats || {};
+        var landTop = opts.landTop || 200;
+        var seaDepth = opts.seaDepth || 20;
+        _hm = {
+            len: meta.length, wid: meta.width, elev: elev,
+            landTop: landTop,
+            kLand: (landTop - cfg.seaLevel) / Math.max(1, st.landP99 || 1),
+            kSea: seaDepth / Math.max(1, -(st.seaP5 || -1)),
+            seaFloor: cfg.seaLevel - seaDepth
+        };
+    }
+    function clearHeightmap() { _hm = null; }
+    function usingHeightmap() { return !!_hm; }
+
+    function _hmAt(r, c) {
+        var m = _hm, v = m.elev[r * m.len + c];
+        if (v >= 0) {
+            var h = cfg.seaLevel + v * m.kLand;
+            if (h <= m.landTop) return h;
+            // The top 1% of peaks: ease them into the headroom under the wall
+            // colour instead of clipping them into flat-topped mesas.
+            var room = cfg.wallColorFrom - 1 - m.landTop;
+            return m.landTop + room * Math.tanh((h - m.landTop) / room);
+        }
+        var s = cfg.seaLevel + v * m.kSea;
+        return s > m.seaFloor ? s : m.seaFloor;
+    }
+
+    function _bakedHeight(x, yy) {
+        var m = _hm;
+        var fr = (x + cfg.bandHalfWidth) / (2 * cfg.bandHalfWidth) * (m.wid - 1);
+        if (fr < 0) fr = 0; else if (fr > m.wid - 1) fr = m.wid - 1;
+        var fc = yy / _L * m.len;
+        var r0 = fr | 0, c0 = fc | 0;
+        var tr = fr - r0, tc = fc - c0;
+        var r1 = r0 + 1 < m.wid ? r0 + 1 : r0;
+        c0 = c0 % m.len;
+        var c1 = (c0 + 1) % m.len;   // wraps: the strip loops along Y
+        var a = _hmAt(r0, c0), b = _hmAt(r0, c1);
+        var c = _hmAt(r1, c0), d = _hmAt(r1, c1);
+        var top = a + (b - a) * tc, bot = c + (d - c) * tc;
+        return top + (bot - top) * tr;
     }
 
     // True where the player can actually stand -- inside the rim wall.
@@ -402,10 +479,12 @@ var WorldGen = (function () {
         else if (h <= s)      { r = 40;  g = 84;  b = 128; }
         else if (h < s + 4)   { r = 186; g = 176; b = 128; }
         else {
+            // A baked heightmap has no biomes: one palette over its own range.
             var bd = BIOME_DEFS[bidx] || BIOME_DEFS[0];
-            var t = (bd.maxHeight - s) > 0 ? (h - (s + 4)) / (bd.maxHeight - (s + 4)) : 0;
+            var top = _hm ? _hm.landTop : bd.maxHeight;
+            var t = (top - s) > 0 ? (h - (s + 4)) / (top - (s + 4)) : 0;
             if (t < 0) t = 0; else if (t > 1) t = 1;
-            var bands = bd.colors, picked = bands[bands.length - 1];
+            var bands = _hm ? HM_COLORS : bd.colors, picked = bands[bands.length - 1];
             for (var i = 0; i < bands.length; i++) { if (t <= bands[i].t) { picked = bands[i]; break; } }
             r = picked.r; g = picked.g; b = picked.b;
         }
@@ -429,6 +508,9 @@ var WorldGen = (function () {
         biomeIndexAt:        biomeIndexAt,
         biomeCount:          biomeCount,
         biomeName:           biomeName,
+        useHeightmap:        useHeightmap,
+        clearHeightmap:      clearHeightmap,
+        usingHeightmap:      usingHeightmap,
         config:              cfg
     };
 
