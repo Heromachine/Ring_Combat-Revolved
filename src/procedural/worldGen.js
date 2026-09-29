@@ -397,9 +397,9 @@ var WorldGen = (function () {
     // wall still applies. clearHeightmap() returns to the procedural world.
     //
     // Metres -> height units: sea level (0 m) sits at cfg.seaLevel, the
-    // strip's 99th-percentile land elevation maps to hmLandTop, and the 5th
-    // percentile sea depth maps to hmSeaDepth below sea level. Linear, so the
-    // relief keeps the shape the generator gave it.
+    // strip's 99th-percentile land elevation maps to landTop through the land
+    // curve (hmKnee), local relief is then exaggerated (hmDetail), and the 5th
+    // percentile sea depth maps to seaDepth below sea level.
     var HM_COLORS = [
         { t: 0.10, r: 118, g: 150, b: 74  },
         { t: 0.28, r: 84,  g: 124, b: 56  },
@@ -410,34 +410,116 @@ var WorldGen = (function () {
     ];
     var _hm = null;
 
+    // Land curve: log(1 + m/knee), scaled so the strip's P99 lands on
+    // landTop. A straight metres->units line squashes relief ~10x against the
+    // horizontal scale (the height store tops out at 255 while real peaks are
+    // thousands of metres), so most ground reads as flat. The log gives low
+    // and mid elevations far more of the range; the knee keeps the first few
+    // metres above sea gentle so coasts stay beaches, not cliffs. Smaller
+    // knee = hillier lowlands. 0 = the old straight line. ?hmKnee=N overrides.
+    cfg.hmKnee = 150;
+    // Local relief gain. Even with the log curve, a strip spanning ~7 km of
+    // real elevation leaves each individual hill only a few height units
+    // tall. So the land is split into its broad shape (a land-only blur,
+    // hmDetailRadius px -- ~1.4 km of real terrain) and the local detail on
+    // top of it, and only the detail is multiplied. Coastlines, valleys and
+    // the mountain range stay where the generator put them; hills get tall.
+    // 1 = no exaggeration. ?hmDetail=N overrides.
+    cfg.hmDetail = 4;
+    cfg.hmDetailRadius = 24;
+    try {
+        var _q = new URLSearchParams(location.search);
+        var _qk = _q.get('hmKnee'), _qd = _q.get('hmDetail');
+        if (_qk !== null && parseFloat(_qk) >= 0) cfg.hmKnee = parseFloat(_qk);
+        if (_qd !== null && parseFloat(_qd) > 0) cfg.hmDetail = parseFloat(_qd);
+    } catch (e) { /* headless */ }
+
+    // Two passes of a box blur along each axis (close to a Gaussian). Wraps
+    // along the strip's length (it loops), clamps across its width.
+    function _blurWrapRows(src, w, h, r) {
+        var n = 2 * r + 1, inv = 1 / n, x, y, s, row, add, sub, pass;
+        var cur = src, tmp = new Float32Array(src.length), out;
+        var colSum = new Float64Array(w);
+        for (pass = 0; pass < 2; pass++) {
+            for (y = 0; y < h; y++) {           // along length: wraps
+                row = y * w; s = 0;
+                for (x = w - r; x < w; x++) s += cur[row + x];
+                for (x = 0; x <= r; x++) s += cur[row + x];
+                add = r + 1; sub = w - r;
+                for (x = 0; x < w; x++) {
+                    tmp[row + x] = s * inv;
+                    s += cur[row + add] - cur[row + sub];
+                    if (++add === w) add = 0;
+                    if (++sub === w) sub = 0;
+                }
+            }
+            out = new Float32Array(src.length);  // across width: clamps
+            for (x = 0; x < w; x++) colSum[x] = tmp[x] * (r + 1);
+            for (y = 1; y <= r; y++) { row = Math.min(h - 1, y) * w; for (x = 0; x < w; x++) colSum[x] += tmp[row + x]; }
+            for (y = 0; y < h; y++) {
+                row = y * w;
+                var ra = Math.min(h - 1, y + r + 1) * w, rs = Math.max(0, y - r) * w;
+                for (x = 0; x < w; x++) {
+                    out[row + x] = colSum[x] * inv;
+                    colSum[x] += tmp[ra + x] - tmp[rs + x];
+                }
+            }
+            cur = out;
+        }
+        return cur;
+    }
+
     function useHeightmap(meta, elev, opts) {
         opts = opts || {};
         var st = meta.stats || {};
         var landTop = opts.landTop || 200;
         var seaDepth = opts.seaDepth || 20;
-        _hm = {
-            len: meta.length, wid: meta.width, elev: elev,
-            landTop: landTop,
-            kLand: (landTop - cfg.seaLevel) / Math.max(1, st.landP99 || 1),
-            kSea: seaDepth / Math.max(1, -(st.seaP5 || -1)),
-            seaFloor: cfg.seaLevel - seaDepth
-        };
+        var knee = opts.knee !== undefined ? opts.knee : cfg.hmKnee;
+        var gain = opts.detail !== undefined ? opts.detail : cfg.hmDetail;
+        var p99 = Math.max(1, st.landP99 || 1), p5 = Math.max(1, -(st.seaP5 || -1));
+        var room = cfg.wallColorFrom - 1 - landTop;
+        var w = meta.length, hgt = meta.width, N = w * hgt, s = cfg.seaLevel;
+        var denom = knee > 0 ? Math.log(1 + p99 / knee) : p99;
+
+        // 1. metres -> height units (land curve, sea depth)
+        var u = new Float32Array(N), land = new Float32Array(N), i;
+        for (i = 0; i < N; i++) {
+            var m = elev[i];
+            if (m >= 0) {
+                u[i] = s + (knee > 0 ? Math.log(1 + m / knee) : m) / denom * (landTop - s);
+                land[i] = 1;
+            } else {
+                u[i] = s - seaDepth * Math.min(1, -m / p5);
+            }
+        }
+
+        // 2. amplify local land relief around a land-only broad shape, so the
+        //    sea never drags a coast's baseline down into a cliff
+        if (gain !== 1) {
+            var lu = new Float32Array(N);
+            for (i = 0; i < N; i++) lu[i] = u[i] * land[i];
+            var num = _blurWrapRows(lu, w, hgt, cfg.hmDetailRadius);
+            var den = _blurWrapRows(land, w, hgt, cfg.hmDetailRadius);
+            for (i = 0; i < N; i++) {
+                if (!land[i] || den[i] <= 0) continue;
+                var base = num[i] / den[i];
+                var h2 = base + (u[i] - base) * gain;
+                u[i] = h2 > s + 0.5 ? h2 : s + 0.5;   // land stays land
+            }
+        }
+
+        // 3. peaks above landTop ease into the headroom under the wall colour
+        //    instead of clipping into flat-topped mesas
+        for (i = 0; i < N; i++) {
+            if (u[i] > landTop) u[i] = landTop + room * Math.tanh((u[i] - landTop) / room);
+        }
+        _hm = { len: w, wid: hgt, h: u, landTop: landTop };
     }
     function clearHeightmap() { _hm = null; }
     function usingHeightmap() { return !!_hm; }
 
     function _hmAt(r, c) {
-        var m = _hm, v = m.elev[r * m.len + c];
-        if (v >= 0) {
-            var h = cfg.seaLevel + v * m.kLand;
-            if (h <= m.landTop) return h;
-            // The top 1% of peaks: ease them into the headroom under the wall
-            // colour instead of clipping them into flat-topped mesas.
-            var room = cfg.wallColorFrom - 1 - m.landTop;
-            return m.landTop + room * Math.tanh((h - m.landTop) / room);
-        }
-        var s = cfg.seaLevel + v * m.kSea;
-        return s > m.seaFloor ? s : m.seaFloor;
+        return _hm.h[r * _hm.len + c];
     }
 
     function _bakedHeight(x, yy) {
