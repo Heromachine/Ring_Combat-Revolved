@@ -61,6 +61,14 @@ var WorldGen = (function () {
         seed:        1337,
         loopRadius:  18,      // noise-space radius of the loop circle
         crossScale:  1 / 700, // noise units per WU across the band
+        // Magnifies the whole noise field (elevation AND lake mask) by this
+        // factor, both around the loop and across the band. 1 is the original
+        // 921025e look -- each biome broken into dozens of small islands
+        // (Coastal Hills 79, Archipelago 109, Wetlands 64 land blobs). 3 gives
+        // each biome a few large landmasses (12 / 25 / 8). Kept as a knob so
+        // the old look is one number away; ?terrainZoom=1 in the URL
+        // overrides it for side-by-side comparison.
+        terrainZoom: 3,
         lacunarity:  2.0,
         gain:        0.5,
         octaves:     5,
@@ -164,6 +172,11 @@ var WorldGen = (function () {
         }
     ];
 
+    try {
+        var _qz = parseFloat(new URLSearchParams(location.search).get('terrainZoom'));
+        if (_qz > 0) cfg.terrainZoom = _qz;
+    } catch (e) { /* no URL (headless test run) -- keep the default */ }
+
     var _L = 1;          // ring length in WU, set by configure()
     var _bounds = null;  // cumulative sector-end Y positions, in [0, _L]
 
@@ -238,12 +251,15 @@ var WorldGen = (function () {
     }
 
     // World position -> noise-space coordinates on the loop circle.
+    // terrainZoom shrinks the circle and the cross axis together, so features
+    // grow larger without stretching in either direction.
     function _coords(x, y) {
         var theta = (2 * Math.PI * y) / _L;
+        var z = cfg.terrainZoom > 0 ? cfg.terrainZoom : 1;
         return {
-            nx: Math.cos(theta) * cfg.loopRadius,
-            ny: Math.sin(theta) * cfg.loopRadius,
-            nz: x * cfg.crossScale
+            nx: Math.cos(theta) * cfg.loopRadius / z,
+            ny: Math.sin(theta) * cfg.loopRadius / z,
+            nz: x * cfg.crossScale / z
         };
     }
 
