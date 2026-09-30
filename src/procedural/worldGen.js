@@ -430,7 +430,7 @@ var WorldGen = (function () {
     // to 0-255. hmTop is where the strip's P99 land elevation lands; peaks
     // above it ease ~12% higher, and the rim wall is raised above that.
     // 200 reproduces the original 0-255 layout. ?hmTop=N overrides.
-    cfg.hmTop = 200;
+    cfg.hmTop = 800;
 
     // Colour index. Colour LUTs stay 256 entries per material, so heights
     // above 255 are quantised: exact below 64 (water, beaches and the coast
@@ -480,7 +480,7 @@ var WorldGen = (function () {
     // and mid elevations far more of the range; the knee keeps the first few
     // metres above sea gentle so coasts stay beaches, not cliffs. Smaller
     // knee = hillier lowlands. 0 = the old straight line. ?hmKnee=N overrides.
-    cfg.hmKnee = 150;
+    cfg.hmKnee = 800;
     // Local relief gain. Even with the log curve, a strip spanning ~7 km of
     // real elevation leaves each individual hill only a few height units
     // tall. So the land is split into its broad shape (a land-only blur,
@@ -493,8 +493,8 @@ var WorldGen = (function () {
     // units of sea level, reading as sand plains on the map and as a
     // water/sand speckle in the chunks. At 1 it is 2.2% (unexaggerated: 1%).
     // 1 = no exaggeration. ?hmDetail=N and ?hmDown=N override.
-    cfg.hmDetail = 6;
-    cfg.hmDetailDown = 1;
+    cfg.hmDetail = 4;
+    cfg.hmDetailDown = 2;
     cfg.hmDetailRadiusWU = 384;   // broad-shape blur radius, world units
     try {
         var _q = new URLSearchParams(location.search);
