@@ -24,7 +24,7 @@ fetch("3D_models/speed-e.obj").then(function(r){ if(!r.ok) throw Error("speed-e.
 function RenderHoverBike(){
   if(!hoverBike.loaded || hoverBike.destroyed)return;
   cubeSinYaw=Math.sin(camera.angle); cubeCosYaw=Math.cos(camera.angle);
-  var s=hoverBike.scale, ground=getRawTerrainHeight(hoverBike.x,hoverBike.y)+8;
+  var s=hoverBike.scale, ground=getSurfaceHeight(hoverBike.x,hoverBike.y)+8;
   var cs=Math.cos(hoverBike.yaw||0), sn=Math.sin(hoverBike.yaw||0);
   var world=hoverBike.vertices.map(function(v){
     var lx=(v[0]+0.095)*s, ly=(v[1]-0.09)*s, lz=v[2]*s;

@@ -71,6 +71,13 @@ var Terrain = (function () {
         return map.altitude[indexAt(worldX, worldY)];
     }
 
+    // The water surface over water, the ground elsewhere (what a hover
+    // vehicle rides on). Same as heightAt where there is no water.
+    function surfaceAt(worldX, worldY) {
+        if (usingChunks() && ChunkTerrain.surfaceAt) return ChunkTerrain.surfaceAt(worldX, worldY);
+        return heightAt(worldX, worldY);
+    }
+
     // Packed ABGR colour of the terrain surface.
     function colorAt(worldX, worldY) {
         if (usingChunks()) return ChunkTerrain.colorAt(worldX, worldY);
@@ -132,6 +139,7 @@ var Terrain = (function () {
         heightAt:     heightAt,
         colorAt:      colorAt,
         groundAt:     groundAt,
+        surfaceAt:    surfaceAt,
         heightAtCell: heightAtCell,
         colorAtCell:  colorAtCell,
         mapWidth:     mapWidth,

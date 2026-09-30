@@ -61,14 +61,18 @@ var ChunkTerrain = (function () {
     // (WorldGen.colorRowTable). The LUT is 768 entries -- material 0, snow,
     // wall -- and the render loop indexes it with (texel >>> 16), still one
     // read. Height alone is (texel & 0xFFFF).
-    var LUT_SIZE = 768;
+    // Material 3 (water, baked heightmap only) is indexed by depth, not
+    // height: its row is units below the surface.
+    var LUT_SIZE = 1024;
     function _buildColorLUTs() {
         var n = WorldGen.biomeCount();
         _colorLUTs = [];
         for (var b = 0; b < n; b++) {
             var arr = new Uint32Array(LUT_SIZE);
             for (var v = 0; v < LUT_SIZE; v++) {
-                arr[v] = WorldGen.colorForHeightBiome(WorldGen.heightForColorRow(v & 255), b, v >> 8);
+                arr[v] = (v >> 8) === 3 && WorldGen.waterColor
+                    ? WorldGen.waterColor(v & 255)
+                    : WorldGen.colorForHeightBiome(WorldGen.heightForColorRow(v & 255), b, v >> 8);
             }
             _colorLUTs.push(arr);
         }
@@ -125,6 +129,7 @@ var ChunkTerrain = (function () {
         var hmOn = !!(WorldGen.usingHeightmap && WorldGen.usingHeightmap());
         var mlat = hmOn ? new Float32Array(N * N) : null;
         var mlatAll = mlat;   // kept for the rock speckle after the snow early-out
+        var seaOn = hmOn && !!WorldGen.waterColor, seaH = WorldGen.config.seaLevel;
         for (var j = 0; j < N; j++) {
             var wy = oy + j * NOISE_STEP;
             for (var i = 0; i < N; i++) {
@@ -209,7 +214,12 @@ var ChunkTerrain = (function () {
                 var a = lat[r0 + i0], b = lat[r0 + i1];
                 var c = lat[r1 + i0], d = lat[r1 + i1];
                 var top = a + (b - a) * tx, bot = c + (d - c) * tx;
-                var h = top + (bot - top) * ty + _detail(ox + x, wy2) * 2.0;
+                var h = top + (bot - top) * ty;
+                // Per-texel roughness, except within 2 units of the sea surface
+                // (baked heightmap): there it flipped neighbouring texels between
+                // beach and water, a salt-and-pepper shoreline. Without it the
+                // waterline follows the smooth terrain contour.
+                if (!(seaOn && h > seaH - 2 && h < seaH + 2)) h += _detail(ox + x, wy2) * 2.0;
 
                 if (touching) {
                     var wx2 = ox + x;
@@ -224,8 +234,16 @@ var ChunkTerrain = (function () {
                         h = h + (t.baseZ - h) * bt;
                     }
                 }
+                var wx3 = ox + x;
+                // Water (baked heightmap): store the flat SURFACE with the
+                // depth in the colour row; heightAt() recovers the floor.
+                if (seaOn && h < seaH && wx3 <= wallX && -wx3 <= wallX) {
+                    var dep = Math.round(seaH - h);
+                    out[rowBase + x] = (seaH | (((3 << 8) | (dep > 255 ? 255 : dep)) << 16)) >>> 0;
+                    continue;
+                }
                 var hv = h < 0 ? 0 : (h > 65535 ? 65535 : h) | 0;
-                var mat = 0, wx3 = ox + x, spv = 0;
+                var mat = 0, spv = 0;
                 if (sg) {
                     var sgx = x >> 2, sgy = y >> 2, sfx = (x & 3) * 0.25, sfy = (y & 3) * 0.25;
                     var s00 = sg[sgy * SGN + sgx], s10 = sg[sgy * SGN + sgx + 1];
@@ -350,7 +368,24 @@ var ChunkTerrain = (function () {
             return WorldGen.heightAtWorld(wx, wy, 0.4);
         }
         var lx = fx - cx * CHUNK, ly = fy - cy * CHUNK;
-        return ch[ly * CHUNK + lx] & 0xFFFF;   // low 16 bits: height (high 16: colour index)
+        var v = ch[ly * CHUNK + lx], ci = v >>> 16;
+        // Low 16 bits: height. For water texels that is the surface; the
+        // floor -- what heightAt means -- is surface minus the depth row.
+        return (ci >> 8) === 3 ? (v & 0xFFFF) - (ci & 255) : (v & 0xFFFF);
+    }
+
+    // Walkable-or-floatable top: the water surface over water, else the
+    // ground. What a hover vehicle rides on.
+    function surfaceAt(wx, wy) {
+        var fx = Math.floor(wx), fy = Math.floor(wy);
+        var cx = Math.floor(fx / CHUNK), cy = Math.floor(fy / CHUNK);
+        var ch = chunkAt(cx, cy);
+        if (!ch) {
+            var h = heightAt(wx, wy);
+            if (WorldGen.usingHeightmap && WorldGen.usingHeightmap() && h < WorldGen.config.seaLevel) h = WorldGen.config.seaLevel;
+            return h;
+        }
+        return ch[(fy - cy * CHUNK) * CHUNK + (fx - cx * CHUNK)] & 0xFFFF;
     }
 
     // Deliberately UNLIT (raw _colorLUTs, not litLUT()) -- callers that want
@@ -405,6 +440,7 @@ var ChunkTerrain = (function () {
         ensure:         ensure,
         chunkAt:        chunkAt,
         heightAt:       heightAt,
+        surfaceAt:      surfaceAt,
         colorAt:        colorAt,
         colorLUTs:      function () { if (!_colorLUTs) _buildColorLUTs(); return _colorLUTs; },
         litLUT:         litLUT,

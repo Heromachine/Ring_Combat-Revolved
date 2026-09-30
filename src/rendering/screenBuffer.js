@@ -123,4 +123,12 @@ function albedoBuffer(){
 function Flip(){
     screendata.imagedata.data.set(screendata.buf8);
     screendata.context.putImageData(screendata.imagedata,0,0);
+    // Underwater: blur the 3D view (not the HUD, which is drawn after Flip),
+    // more the deeper the eye is. Canvas filters run on the GPU.
+    if (typeof underwaterState !== 'undefined' && underwaterState.active) {
+        var ctx = screendata.context;
+        ctx.filter = 'blur(' + (1 + Math.min(3, underwaterState.depth / 25)).toFixed(1) + 'px)';
+        ctx.drawImage(screendata.canvas, 0, 0);
+        ctx.filter = 'none';
+    }
 }

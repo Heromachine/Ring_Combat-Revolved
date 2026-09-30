@@ -23,7 +23,7 @@ var HoverBikeRide = (function () {
             !hoverBike.destroyed && hoverBike.loaded && player.health > 0 &&
             Math.hypot(camera.x - hoverBike.x, camera.y - hoverBike.y) <= MOUNT_RANGE &&
             Math.abs(camera.height - playerHeightOffset -
-                getRawTerrainHeight(hoverBike.x, hoverBike.y)) < 40;
+                getSurfaceHeight(hoverBike.x, hoverBike.y)) < 40;
     }
 
     function uiBlocked() {
@@ -54,7 +54,7 @@ var HoverBikeRide = (function () {
     function placeRider() {
         camera.x = hoverBike.x;
         camera.y = hoverBike.y;
-        camera.height = getRawTerrainHeight(hoverBike.x, hoverBike.y) + EYE_ABOVE_GROUND;
+        camera.height = getSurfaceHeight(hoverBike.x, hoverBike.y) + EYE_ABOVE_GROUND;
         camera.velocityY = 0;
         camera.adsOffset = 0;
         camera.baseX = camera.x;
@@ -140,8 +140,8 @@ var HoverBikeRide = (function () {
         var fx = -Math.sin(hoverBike.yaw), fy = -Math.cos(hoverBike.yaw);
         var travelSign = Math.sign(speed) || 1;
         var look = 18;
-        var currentGround = getRawTerrainHeight(hoverBike.x, hoverBike.y);
-        var aheadGround = getRawTerrainHeight(hoverBike.x + fx * look * travelSign,
+        var currentGround = getSurfaceHeight(hoverBike.x, hoverBike.y);
+        var aheadGround = getSurfaceHeight(hoverBike.x + fx * look * travelSign,
                                               hoverBike.y + fy * look * travelSign);
         var grade = Math.abs(aheadGround - currentGround) / look;
         // tan(45 degrees) = 1. A full-speed impact destroys the vehicle.

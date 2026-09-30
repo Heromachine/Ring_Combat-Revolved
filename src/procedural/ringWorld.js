@@ -171,6 +171,7 @@ function buildRingNoiseLOD() {
     var dy = ringWorld.ringLength / A;
     var dx = (ringWorld.halfWidth * 2) / C;
     var col = new Uint32Array(A * C), hgt = new Float32Array(A * C);
+    var hmSea = (WorldGen.usingHeightmap && WorldGen.usingHeightmap()) ? WorldGen.config.seaLevel : null;
 
     for (var j = 0; j < A; j++) {
         var wy = -ringWorld._halfLen + j * dy;
@@ -182,7 +183,9 @@ function buildRingNoiseLOD() {
             var wx = -ringWorld.halfWidth + i * dx;
             var h = WorldGen.heightAtWorld(wx, wy, 0.5);   // reduced octaves
             var o = j * C + i;
-            hgt[o] = h;
+            // Baked heightmap: water is a flat surface at sea level (the
+            // colour below still comes from the floor depth).
+            hgt[o] = (hmSea !== null && h < hmSea) ? hmSea : h;
             var hcol = WorldGen.colorHeightAt ? WorldGen.colorHeightAt(h, wx, wy) : h;
             col[o] = WorldGen.colorForHeightBiome(hcol, bio,
                 WorldGen.materialAtWorld ? WorldGen.materialAtWorld(wx, wy) : 0);
@@ -282,6 +285,8 @@ function ringInsideWidth(x) {
 // this pass the ring is a hill that curves up and stops.
 // -----------------------------------------------------------------------
 function RenderRingBackdrop() {
+    // Underwater nothing beyond the fog is visible (see voxelEngine.js).
+    if (typeof underwaterState !== 'undefined' && underwaterState.active) return;
     if (!ringWorld.enabled) return;
 
     var R = ringWorld.ringRadius;

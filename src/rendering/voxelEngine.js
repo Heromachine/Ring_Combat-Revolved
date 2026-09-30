@@ -9,8 +9,14 @@
 // ~20 call sites use them and there is no value in churning those; what
 // matters is that the world's shape is defined in one place.
 var getRawTerrainHeight = (x, y) => Terrain.heightAt(x, y);
+// Water surface where there is water, else the ground -- for hover vehicles.
+var getSurfaceHeight = (x, y) => Terrain.surfaceAt(x, y);
 
 function getGroundHeight(x, y) { return Terrain.groundAt(x, y); }
+
+// Set by Render() every frame: is the eye below the water surface, and how
+// deep. Read by the ring backdrop (skipped underwater) and Flip() (blur).
+var underwaterState = { active: false, depth: 0 };
 
 // Render terrain using voxel space algorithm
 function Render(){
@@ -64,8 +70,25 @@ function Render(){
         _rL=ringWorld.ringLength; _rHalf=ringWorld._halfLen;
     }
 
+    // Underwater (baked heightmap, eye below the sea surface): draw the sea
+    // FLOOR instead of the surface, with every sample fogged toward a water
+    // colour by distance. Visibility shrinks and the fog darkens with depth.
+    // Above water this costs one hoisted flag check per sample.
+    var _sea = (_chunks && WorldGen.usingHeightmap && WorldGen.usingHeightmap()) ? WorldGen.config.seaLevel : null;
+    var _under = _sea !== null && camera.height < _sea;
+    var _uDepth = _under ? _sea - camera.height : 0;
+    underwaterState.active = _under; underwaterState.depth = _uDepth;
+    var _uInvVis = 0, _fR = 0, _fG = 0, _fB = 0, _fogF = 0, _uwet = false, _bedCol = 0;
+    if (_under) {
+        _uInvVis = (1 + _uDepth / 30) / 260;          // ~260 WU at the surface, ~110 at 40 deep
+        var _dk = Math.exp(-_uDepth / 90);
+        _fR = 22 * _dk; _fG = 64 * _dk; _fB = 84 * _dk;
+        _bedCol = WorldGen.seabedColor(_uDepth);
+    }
+
     hiddeny.fill(sh);
     for(var z=1;z<camera.distance;z+=deltaz){
+        if(_under) _fogF = 1 - Math.exp(-z * _uInvVis);
         var plx=-cosang*z-sinang*z,ply=sinang*z-cosang*z,prx=cosang*z-sinang*z,pry=-sinang*z-cosang*z,dx=(prx-plx)/sw,dy=(pry-ply)/sw;
         plx+=camera.x;ply+=camera.y;var invz = camera.focalLength / z;
         for(var i=0;i<sw;i++){
@@ -91,8 +114,14 @@ function Render(){
                 // Texel = height (low 16 bits) | colour index << 16 (see
                 // chunkTerrain.js). A miss returns a bare height.
                 var _tex=_lastChunk ? _lastChunk[((_fy&_cMask)<<_cShift)+(_fx&_cMask)]
-                                    : ChunkTerrain.heightAt(plx,ply);
+                                    : (_under ? ChunkTerrain.heightAt(plx,ply) : ChunkTerrain.surfaceAt(plx,ply));
                 _alt=_lastChunk ? (_tex&0xFFFF) : _tex;
+                if(_under){
+                    // water texel: drop from the stored surface to the floor
+                    var _uci=_tex>>>16;
+                    _uwet = _lastChunk ? ((_uci>>8)===3) : (_alt < _sea);
+                    if(_uwet && _lastChunk) _alt -= (_uci & 255);
+                }
                 // Miss (chunk not resident): biome must be looked up directly
                 // since there is no stored chunk to read it from. Misses are
                 // already the expensive path (a full function call above);
@@ -121,13 +150,26 @@ function Render(){
                 var _raw=_curRawLut ? _curRawLut[_colAlt] : _col;
                 for(var k=heightonscreen|0;k<hiddeny[i];k++){
                     var idx=k*sw+i;
-                    if(z<depth[idx]){screendata.buf32[idx]=_col;depth[idx]=z;if(_albedo)_albedo[idx]=_raw;}
+                    if(z<depth[idx]){
+                        var _dc=_col;
+                        if(_under){
+                            var _bc=_uwet?_bedCol:_col, _br=_bc&255, _bg=(_bc>>8)&255, _bb=(_bc>>16)&255;
+                            _dc=(0xFF000000|((_bb+(_fB-_bb)*_fogF)<<16)|((_bg+(_fG-_bg)*_fogF)<<8)|(_br+(_fR-_br)*_fogF))>>>0;
+                        }
+                        screendata.buf32[idx]=_dc;depth[idx]=z;if(_albedo)_albedo[idx]=_raw;
+                    }
                 }
                 hiddeny[i]=heightonscreen;
             }
             plx+=dx;ply+=dy;
         }
         if(z>1000)deltaz+=0.02;else deltaz+=0.005;
+    }
+    if(_under){
+        // Nothing above the floor is visible through the water: fill every
+        // pixel the terrain did not write (sky) with the fog colour.
+        var _fogCol=(0xFF000000|(_fB<<16)|(_fG<<8)|_fR)>>>0, _buf=screendata.buf32;
+        for(var _p=0;_p<_buf.length;_p++){ if(depth[_p]===Infinity) _buf[_p]=_fogCol; }
     }
 }
 

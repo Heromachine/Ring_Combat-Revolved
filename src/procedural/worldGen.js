@@ -401,8 +401,8 @@ var WorldGen = (function () {
     //
     // Metres -> height units: sea level (0 m) sits at cfg.seaLevel, the
     // strip's 99th-percentile land elevation maps to landTop through the land
-    // curve (hmKnee), local relief is then exaggerated (hmDetail), and the 5th
-    // percentile sea depth maps to seaDepth below sea level.
+    // curve (hmKnee), local relief is then exaggerated (hmDetail), and real
+    // sea depth goes through seabedDepth() (shelf, drop-off, deep floor).
     // Upper (rock) bands follow VoxelMaster-Minimal's mountainColor
     // (src/procedural/biomeGen.js): dark brown rock, brown-grey, grey,
     // light grey. Snow is a material, not a band -- see MAT_SNOW.
@@ -441,6 +441,58 @@ var WorldGen = (function () {
     // heightmap has materials; the procedural world is always 0.
     var MAT_SNOW = 1;
     var MAT_WALL = 2;   // baked heightmap only: the rim wall, by position
+    var MAT_WATER = 3;  // baked heightmap only: water surface; colour row = depth
+
+    // ---- Water (baked heightmap) ----
+    // The sea is a flat surface at seaLevel over a real floor. Chunks store
+    // the SURFACE height for water texels (so the renderer draws a flat
+    // plane with no per-pixel cost) and the depth in the colour row; the
+    // floor is surface - depth (physics, the underwater view).
+    //
+    // Floor shape from real depth: a wet-sand shelf that plateaus at
+    // shelfUnits below the surface (wading depth) out to shelfM of real
+    // depth -- ~150-250 WU from shore on this strip -- then a drop-off to
+    // deepUnits by dropM, deeper than eye height so a player sinks out of
+    // sight there. Swimming is not modelled yet.
+    cfg.shelfM = 25;
+    cfg.dropM = 80;
+    cfg.shelfUnits = 4;
+    cfg.deepUnits = 110;
+    function seabedDepth(mDeep) {           // real depth (m, > 0) -> units below surface
+        if (mDeep <= cfg.shelfM) {
+            var t = mDeep / (cfg.shelfM * 0.3); if (t > 1) t = 1;
+            return 1 + (cfg.shelfUnits - 1) * t;           // quick slope, then the plateau
+        }
+        if (mDeep <= cfg.dropM) {
+            var d = (mDeep - cfg.shelfM) / (cfg.dropM - cfg.shelfM);
+            d = d * d * (3 - 2 * d);
+            return cfg.shelfUnits + (cfg.deepUnits - cfg.shelfUnits) * d;
+        }
+        return cfg.deepUnits + Math.min(20, (mDeep - cfg.dropM) / 100);   // gentle abyss
+    }
+    // Surface colour by depth (units): wet sand at the edge, teal over the
+    // shelf, navy over deep water. Two falloffs: the sand fades within a
+    // few units, the blue deepens over tens.
+    var WET_SAND = { r: 148, g: 128, b: 98 };   // VoxelMaster-Minimal beachColor, wet end
+    var SHALLOW = { r: 58, g: 112, b: 118 };
+    var DEEP = { r: 16, g: 38, b: 72 };
+    function waterColor(d) {
+        var a1 = 1 - Math.exp(-d / 2.5), a2 = 1 - Math.exp(-d / 14);
+        var r = WET_SAND.r + (SHALLOW.r - WET_SAND.r) * a1;
+        var g = WET_SAND.g + (SHALLOW.g - WET_SAND.g) * a1;
+        var b = WET_SAND.b + (SHALLOW.b - WET_SAND.b) * a1;
+        r += (DEEP.r - r) * a2; g += (DEEP.g - g) * a2; b += (DEEP.b - b) * a2;
+        var v = ((d * 7919) % 5) - 2;          // faint banding, like the land LUT
+        r = Math.max(0, Math.min(255, r + v)) | 0;
+        g = Math.max(0, Math.min(255, g + v)) | 0;
+        b = Math.max(0, Math.min(255, b + v)) | 0;
+        return (0xFF000000 | (b << 16) | (g << 8) | r) >>> 0;
+    }
+    // The floor as seen from underwater: wet sand, darkening a little with depth.
+    function seabedColor(d) {
+        var k = Math.max(0.35, 1 - d / 160);
+        return (0xFF000000 | ((WET_SAND.b * k) << 16) | ((WET_SAND.g * k) << 8) | (WET_SAND.r * k)) >>> 0;
+    }
     var SNOW_COLOR = { r: 236, g: 238, b: 242 };
 
     // ---- Height ceiling (option B) ----
@@ -570,11 +622,10 @@ var WorldGen = (function () {
         var meta = _hmSrc.meta, elev = _hmSrc.elev, opts = _hmSrc.opts;
         var st = meta.stats || {};
         var landTop = opts.landTop || cfg.hmTop;
-        var seaDepth = opts.seaDepth || 20;
         var knee = opts.knee !== undefined ? opts.knee : cfg.hmKnee;
         var gain = opts.detail !== undefined ? opts.detail : cfg.hmDetail;
         var gainDown = opts.detailDown !== undefined ? opts.detailDown : cfg.hmDetailDown;
-        var p99 = Math.max(1, st.landP99 || 1), p5 = Math.max(1, -(st.seaP5 || -1));
+        var p99 = Math.max(1, st.landP99 || 1);
         // Headroom the top 1% of peaks ease into. At the default ceiling this
         // is the gap under the old 225 wall-colour band (the wall is a
         // material now, so height no longer has to stay below it); above
@@ -589,7 +640,7 @@ var WorldGen = (function () {
             var m = elev[i];
             u[i] = m >= 0
                 ? s + (knee > 0 ? Math.log(1 + m / knee) : m) / denom * (landTop - s)
-                : s - seaDepth * Math.min(1, -m / p5);
+                : s - seabedDepth(-m);
         }
 
         // 2. amplify local land relief around a land-only broad shape, so the
@@ -777,13 +828,21 @@ var WorldGen = (function () {
         var s = cfg.seaLevel;
         var r, g, b;
 
+        // Baked heightmap: anything below sea level is water, coloured by depth.
+        if (mat === MAT_WATER) return waterColor(h);            // h is the depth row here
+        if (_hmSrc && h < s && mat !== MAT_WALL) return waterColor(s - h);
+
         if (cfg.edgeWall && (_hmSrc ? mat === MAT_WALL : h >= cfg.wallColorFrom)) {
             var band = Math.floor(h) % 3;
             var v = 138 + band * 6;
             return (0xFF000000 | (v << 16) | (v << 8) | v) >>> 0;
         }
 
-        if (h <= s - 12)      { r = 18;  g = 42;  b = 78;  }
+        // With a baked heightmap, water texels never reach here (see above),
+        // so land at sea level is beach, not the procedural water bands --
+        // those painted shoreline land blue and speckled the coast.
+        if (_hmSrc && h < s + 4) { r = 186; g = 176; b = 128; }
+        else if (h <= s - 12) { r = 18;  g = 42;  b = 78;  }
         else if (h <= s - 5)  { r = 26;  g = 58;  b = 99;  }
         else if (h <= s)      { r = 40;  g = 84;  b = 128; }
         else if (mat === MAT_SNOW) { r = SNOW_COLOR.r; g = SNOW_COLOR.g; b = SNOW_COLOR.b; }
@@ -824,6 +883,9 @@ var WorldGen = (function () {
         materialAtWorld:     materialAtWorld,
         colorIndex:          colorIndex,
         speckleAt:           speckleAt,
+        waterColor:          waterColor,
+        seabedColor:         seabedColor,
+        MAT_WATER:           MAT_WATER,
         snowForMetres:       snowForMetres,
         speckleParams:       speckleParams,
         colorHeightAt:       colorHeightAt,
