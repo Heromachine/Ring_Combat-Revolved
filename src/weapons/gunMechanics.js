@@ -60,16 +60,6 @@ function getBarrelScreenPos() {
     };
 }
 
-// The world offsets in gunModel (worldForward/Right/Down, barrelDistance)
-// were tuned for a 70-unit eye height. Scale them with the player so the
-// muzzle stays at the hands: at eye height 7 the raw "5 right, 5 down" put
-// it knee-high a body-width away, and close shots crossed the screen at 45
-// degrees on their way to the crosshair.
-var GUN_OFFSETS_TUNED_EYE_HEIGHT = 70;
-function gunWorldScale() {
-    return (playerHeightOffset || GUN_OFFSETS_TUNED_EYE_HEIGHT) / GUN_OFFSETS_TUNED_EYE_HEIGHT;
-}
-
 // Get barrel position in world coordinates (for bullet spawning)
 // Option B: barrel tip = gun pivot + gunDir * per-weapon barrel length (from WeaponConfig)
 function getBarrelWorldPos() {
@@ -79,10 +69,9 @@ function getBarrelWorldPos() {
     var rx = camCos, ry = -camSin;   // right (world)
 
     // Gun pivot position in world (where the gun is held)
-    var gs = gunWorldScale();
-    var gunWorldX = camera.x + (fx * gunModel.worldForward + rx * gunModel.worldRight) * gs;
-    var gunWorldY = camera.y + (fy * gunModel.worldForward + ry * gunModel.worldRight) * gs;
-    var gunWorldZ = camera.height - gunModel.worldDown * gs;
+    var gunWorldX = camera.x + fx * gunModel.worldForward + rx * gunModel.worldRight;
+    var gunWorldY = camera.y + fy * gunModel.worldForward + ry * gunModel.worldRight;
+    var gunWorldZ = camera.height - gunModel.worldDown;
 
     // Gun direction: screen-center for ADS, hip anchor for hip. barrelYaw applies in both modes.
     var gunDirX, gunDirY, gunDirZ;

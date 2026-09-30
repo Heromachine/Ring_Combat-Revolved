@@ -623,11 +623,10 @@ function UpdateCamera(){
     // Helper: spawn barrel position
     function getSpawnPos() {
         var bp = getBarrelWorldPos();
-        var bd = gunModel.barrelDistance * gunWorldScale();
         return {
-            x: bp.x + bp.dirX * bd,
-            y: bp.y + bp.dirY * bd,
-            z: bp.z + bp.dirZ * bd
+            x: bp.x + bp.dirX * gunModel.barrelDistance,
+            y: bp.y + bp.dirY * gunModel.barrelDistance,
+            z: bp.z + bp.dirZ * gunModel.barrelDistance
         };
     }
 

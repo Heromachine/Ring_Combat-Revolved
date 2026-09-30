@@ -635,8 +635,8 @@ function DrawDebugMinimap() {
     }
 
     // Bullet spawn (grey dot)
-    var spawnX = barrelPos.x + displayDir.x * (gunModel.barrelDistance * gunWorldScale());
-    var spawnY = barrelPos.y + displayDir.y * (gunModel.barrelDistance * gunWorldScale());
+    var spawnX = barrelPos.x + displayDir.x * gunModel.barrelDistance;
+    var spawnY = barrelPos.y + displayDir.y * gunModel.barrelDistance;
     var spx = (spawnX - camera.x) * scale;
     var spy = (spawnY - camera.y) * scale;
     if (Math.abs(spx) < size / 2 && Math.abs(spy) < size / 2) {
@@ -960,13 +960,13 @@ function DrawSideView(ctx){
 
     if (gunModel.pivotMode === 'barrel') {
         // ADS: pivot at barrel position (forward from player)
-        var pivotDist = (gunModel.worldForward * gunWorldScale());
-        var pivotZ = camera.height - (gunModel.worldDown * gunWorldScale()) + Math.tan(-gunPitch) * pivotDist;
+        var pivotDist = gunModel.worldForward;
+        var pivotZ = camera.height - gunModel.worldDown + Math.tan(-gunPitch) * pivotDist;
         pivotScreenPos = toScreen(pivotDist, pivotZ);
     } else {
         // Hip: pivot at grip (back of gun, close to player)
-        var gripDist = (gunModel.worldForward * gunWorldScale()) - gunWorldLength * 0.4;
-        var gripZ = camera.height - (gunModel.worldDown * gunWorldScale());
+        var gripDist = gunModel.worldForward - gunWorldLength * 0.4;
+        var gripZ = camera.height - gunModel.worldDown;
         pivotScreenPos = toScreen(gripDist, gripZ);
     }
 
@@ -1029,8 +1029,8 @@ function DrawSideView(ctx){
     // Use barrelPos.dir for both ADS and hip — same formula now
     var svGunFwdComp = barrelPos.dirX * fx + barrelPos.dirY * fy;
     var svGunZComp = barrelPos.dirZ;
-    var svSpawnFwdDist = barrelFwdDist + (gunModel.barrelDistance * gunWorldScale()) * svGunFwdComp;
-    var svSpawnZ = barrelPos.z + (gunModel.barrelDistance * gunWorldScale()) * svGunZComp;
+    var svSpawnFwdDist = barrelFwdDist + gunModel.barrelDistance * svGunFwdComp;
+    var svSpawnZ = barrelPos.z + gunModel.barrelDistance * svGunZComp;
     var svSpawnPos = toScreen(svSpawnFwdDist, svSpawnZ);
     var svSpawnScreenX = svSpawnPos.x;
     var svSpawnScreenY = svSpawnPos.y;
