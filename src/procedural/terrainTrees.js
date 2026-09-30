@@ -221,30 +221,46 @@ var TerrainTrees = (function () {
         _canopyImg.src = c.toDataURL('image/png');
         return null;
     }
-    // Canopy items for this frame: within canopyDist, in front of the
-    // camera, nearest canopyMax. Rebuilt only when the camera has moved a
-    // cell or turned noticeably.
-    var _vis = [], _visKey = '';
+    // Canopy items for this frame: within canopyDist, inside the view
+    // frustum, nearest canopyMax. Two caches: the distance-sorted trees
+    // around the camera are rebuilt only when it moves a cell (scanning
+    // ~9000 cells), and the frustum pick from that list only when it turns
+    // noticeably -- so turning on the spot never rescans the cells, and the
+    // canopyMax budget goes to trees on screen, not the ones beside you.
+    var _vis = [], _visKey = '', _near = [], _nearKey = '';
     function visibleCanopies() {
         var img = canopyImage();
         if (!img || !(cfg.density > 0) || typeof camera === 'undefined') return [];
-        var key = Math.round(camera.x / CELL) + ',' + Math.round(camera.y / CELL) + ',' + Math.round(camera.angle * 20);
+        var R = cfg.canopyDist;
+        var posKey = Math.round(camera.x / CELL) + ',' + Math.round(camera.y / CELL);
+        if (posKey !== _nearKey) {
+            _nearKey = posKey; _visKey = '';
+            var all = treesInRect(camera.x - R, camera.y - R, camera.x + R, camera.y + R);
+            _near = [];
+            for (var k = 0; k < all.length; k++) {
+                var t = all[k], dx = t.x - camera.x, dy = t.y - camera.y, d2 = dx * dx + dy * dy;
+                if (d2 > R * R) continue;
+                t._d2 = d2; _near.push(t);
+            }
+            _near.sort(function (a, b) { return a._d2 - b._d2; });
+        }
+        var key = posKey + ',' + Math.round(camera.angle * 20);
         if (key === _visKey) return _vis;
         _visKey = key;
-        var R = cfg.canopyDist, fx = -Math.sin(camera.angle), fy = -Math.cos(camera.angle);
-        var all = treesInRect(camera.x - R, camera.y - R, camera.x + R, camera.y + R), cand = [];
-        for (var k = 0; k < all.length; k++) {
-            var t = all[k], dx = t.x - camera.x, dy = t.y - camera.y, d2 = dx * dx + dy * dy;
-            if (d2 > R * R) continue;
-            if (dx * fx + dy * fy < -t.canopyW) continue;          // behind the camera
-            t._d2 = d2; cand.push(t);
+        // Items project with |right| < forward on screen (90 deg across,
+        // itemRenderer.js). The 1.12 slack covers the 1/20 rad the angle key
+        // rounds away, so nothing pops in at the screen edge while turning.
+        var fx = -Math.sin(camera.angle), fy = -Math.cos(camera.angle);
+        var rx = Math.cos(camera.angle), ry = -Math.sin(camera.angle);
+        _vis = [];
+        for (var n = 0; n < _near.length && _vis.length < cfg.canopyMax; n++) {
+            var c = _near[n], cx = c.x - camera.x, cy = c.y - camera.y;
+            var fwd = cx * fx + cy * fy, side = cx * rx + cy * ry;
+            if (fwd < -c.canopyW) continue;                              // behind the camera
+            if (Math.abs(side) > fwd * 1.12 + c.canopyW) continue;       // off the side of the screen
+            _vis.push(c.item || (c.item = { type: 'canopy', x: c.x, y: c.y, z: c.canopyZ,
+                w: c.canopyW, h: c.canopyH, depthBias: c.r + 1, dx: 0, dy: 0, dz: 0, image: img }));
         }
-        cand.sort(function (a, b) { return a._d2 - b._d2; });
-        if (cand.length > cfg.canopyMax) cand.length = cfg.canopyMax;
-        _vis = cand.map(function (t) {
-            return t.item || (t.item = { type: 'canopy', x: t.x, y: t.y, z: t.canopyZ,
-                w: t.canopyW, h: t.canopyH, depthBias: t.r + 1, dx: 0, dy: 0, dz: 0, image: img });
-        });
         return _vis;
     }
 
@@ -267,7 +283,7 @@ var TerrainTrees = (function () {
     // Forget cached placement (the world or the buildings changed) and drop
     // any canopy items left over from the old test trees.
     function refresh() {
-        _memo.clear(); _vis = []; _visKey = '';
+        _memo.clear(); _vis = []; _visKey = ''; _near = []; _nearKey = '';
         if (typeof items !== 'undefined') {
             for (var i = items.length - 1; i >= 0; i--) if (items[i] && items[i].type === 'canopy') items.splice(i, 1);
         }

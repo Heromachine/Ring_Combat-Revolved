@@ -3,7 +3,12 @@
 // ===============================
 "use strict";
 
+// Where the round minimap was last drawn, in canvas pixels ({x, y, r}), so
+// a tap on it can open the in-game menu (touch.js). Null while not drawn.
+var minimapHitArea = null;
+
 function DrawMinimap() {
+    minimapHitArea = null;
     // GMD debug mode: swap to the square debug overhead view
     if (isAdmin && showMinimaps) {
         DrawDebugMinimap();
@@ -249,6 +254,19 @@ function DrawMinimap() {
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign    = 'left';
 
+    // Touch has no Tab / Start key: tapping the minimap opens the menu.
+    minimapHitArea = { x: cx, y: cy, r: R };
+    if (touchControls.enabled) {
+        ctx.font         = 'bold ' + Math.max(9, Math.floor(11 * mmScale)) + 'px monospace';
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle    = 'rgba(8,15,22,0.75)';
+        ctx.fillRect(cx - R * 0.42, cy + R * 0.62, R * 0.84, R * 0.26);
+        ctx.fillStyle    = '#8ab0c8';
+        ctx.fillText('\u2630 MENU', cx, cy + R * 0.75);
+        ctx.textBaseline = 'alphabetic';
+        ctx.textAlign    = 'left';
+    }
 }
 
 // Square overhead debug minimap (admin GMD mode — shown when "Show minimaps & legend" is checked)

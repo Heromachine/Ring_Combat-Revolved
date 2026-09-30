@@ -26,6 +26,19 @@ function _grabStick(stick, pos, touch) {
     return true;
 }
 
+// Is this touch (client coords) on the round minimap? The minimap is drawn
+// in canvas pixels, which match client pixels on touch layouts, but map
+// through the canvas rect anyway in case that ever changes.
+function _touchOnMinimap(x, y) {
+    var mm = (typeof minimapHitArea !== 'undefined') ? minimapHitArea : null;
+    if (!mm) return false;
+    var c = screendata.canvas, rect = c.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+    var px = (x - rect.left) * c.width / rect.width;
+    var py = (y - rect.top) * c.height / rect.height;
+    return Math.hypot(px - mm.x, py - mm.y) <= mm.r;
+}
+
 function enableTouchControls() {
     touchControls.enabled = true;
     updateTouchControlPositions();
@@ -94,6 +107,12 @@ function handleTouchStart(e) {
         var touch = e.changedTouches[i];
         var x = touch.clientX;
         var y = touch.clientY;
+
+        // Minimap: opens the in-game menu (the menu's Resume button closes it)
+        if (_touchOnMinimap(x, y)) {
+            if (typeof InGameMenu !== 'undefined') InGameMenu.show();
+            return;
+        }
 
         // Weapon slot touches
         for (var j = 0; j < touchControls.weaponSlots.length; j++) {
