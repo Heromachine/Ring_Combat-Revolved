@@ -54,17 +54,22 @@ var ChunkTerrain = (function () {
     // which is what keeps this a per-CHUNK array lookup rather than a
     // per-pixel biome computation in the render hot loop.
     //
-    // Texels are Uint16: height in the low byte, material (worldGen.js
-    // MAT_*) in the high byte. The LUT is 512 entries -- [0..255] material 0,
-    // [256..511] snow -- so the render loop indexes it with the whole texel
-    // value, still one read. Height alone is (texel & 255).
-    var LUT_SIZE = 512;
+    // Texels are Uint32: height in the low 16 bits (a baked heightmap can
+    // exceed 255 -- see worldGen.js hmTop), colour index in the high 16.
+    // The colour index is material (worldGen.js MAT_*) << 8 | colour row,
+    // where the row is the height itself below 256, quantised above it
+    // (WorldGen.colorRowTable). The LUT is 768 entries -- material 0, snow,
+    // wall -- and the render loop indexes it with (texel >>> 16), still one
+    // read. Height alone is (texel & 0xFFFF).
+    var LUT_SIZE = 768;
     function _buildColorLUTs() {
         var n = WorldGen.biomeCount();
         _colorLUTs = [];
         for (var b = 0; b < n; b++) {
             var arr = new Uint32Array(LUT_SIZE);
-            for (var v = 0; v < LUT_SIZE; v++) arr[v] = WorldGen.colorForHeightBiome(v & 255, b, v >> 8);
+            for (var v = 0; v < LUT_SIZE; v++) {
+                arr[v] = WorldGen.colorForHeightBiome(WorldGen.heightForColorRow(v & 255), b, v >> 8);
+            }
             _colorLUTs.push(arr);
         }
     }
@@ -117,7 +122,8 @@ var ChunkTerrain = (function () {
 
         // Real elevation (metres) on the same lattice, for materials. Only a
         // baked heightmap has it; without one every texel is material 0.
-        var mlat = (WorldGen.usingHeightmap && WorldGen.usingHeightmap()) ? new Float32Array(N * N) : null;
+        var hmOn = !!(WorldGen.usingHeightmap && WorldGen.usingHeightmap());
+        var mlat = hmOn ? new Float32Array(N * N) : null;
         for (var j = 0; j < N; j++) {
             var wy = oy + j * NOISE_STEP;
             for (var i = 0; i < N; i++) {
@@ -139,7 +145,12 @@ var ChunkTerrain = (function () {
             else if (mMin > snowHi) { snowAll = true; mlat = null; }
         }
 
-        var out = new Uint16Array(CHUNK * CHUNK);
+        var out = new Uint32Array(CHUNK * CHUNK);
+        // Height -> colour row (null: identity, heights all fit in 255) and
+        // the X beyond which a baked heightmap paints the rim wall.
+        var rowTbl = WorldGen.colorRowTable ? WorldGen.colorRowTable() : null;
+        var rowTop = rowTbl ? rowTbl.length - 1 : 255;
+        var wallX = (hmOn && WorldGen.config.edgeWall) ? WorldGen.wallMaterialX() : Infinity;
         var inv = 1 / NOISE_STEP;
 
         // Buildings (src/indoor/buildingPlacer.js) are sited by WorldGen
@@ -191,20 +202,24 @@ var ChunkTerrain = (function () {
                         h = h + (t.baseZ - h) * bt;
                     }
                 }
-                var hv = h < 0 ? 0 : (h > 255 ? 255 : h) | 0;
-                if (snowAll) hv |= 256;
+                var hv = h < 0 ? 0 : (h > 65535 ? 65535 : h) | 0;
+                var mat = 0, wx3 = ox + x;
+                if (wx3 > wallX || -wx3 > wallX) mat = 2;   // worldGen.js MAT_WALL
+                else if (snowAll) mat = 1;                   // MAT_SNOW
                 else if (mlat) {
                     var ma = mlat[r0 + i0], mb = mlat[r1 + i0], mc = mlat[r0 + i1], md = mlat[r1 + i1];
                     // per 8x8 lattice cell: all four corners clear of the
                     // ragged edge band decides the whole cell without a call
-                    if (ma > snowHi && mb > snowHi && mc > snowHi && md > snowHi) hv |= 256;
+                    if (ma > snowHi && mb > snowHi && mc > snowHi && md > snowHi) mat = 1;
                     else if (ma > snowLo || mb > snowLo || mc > snowLo || md > snowLo) {
                         var mt = ma + (mc - ma) * tx;
                         var m = mt + ((mb + (md - mb) * tx) - mt) * ty;
-                        hv |= WorldGen.materialForMetres(m, ox + x, wy2) << 8;
+                        mat = WorldGen.materialForMetres(m, wx3, wy2);
                     }
                 }
-                out[rowBase + x] = hv;
+                var hr = hv > rowTop ? rowTop : hv;
+                var crow = rowTbl ? rowTbl[hr] : hr;
+                out[rowBase + x] = (hv | (((mat << 8) | crow) << 16)) >>> 0;
             }
         }
 
@@ -292,7 +307,7 @@ var ChunkTerrain = (function () {
             return WorldGen.heightAtWorld(wx, wy, 0.4);
         }
         var lx = fx - cx * CHUNK, ly = fy - cy * CHUNK;
-        return ch[ly * CHUNK + lx] & 255;   // low byte: height (high byte is material)
+        return ch[ly * CHUNK + lx] & 0xFFFF;   // low 16 bits: height (high 16: colour index)
     }
 
     // Deliberately UNLIT (raw _colorLUTs, not litLUT()) -- callers that want
@@ -310,10 +325,10 @@ var ChunkTerrain = (function () {
         var hit = _live[s] && _coords[s * 2] === cx && _coords[s * 2 + 1] === cy;
         if (hit) {
             var lx = fx - cx * CHUNK, ly = fy - cy * CHUNK;
-            return _colorLUTs[_biomes[s]][_slots[s][ly * CHUNK + lx]];   // full texel: height + material
+            return _colorLUTs[_biomes[s]][_slots[s][ly * CHUNK + lx] >>> 16];   // colour index
         }
         var h = heightAt(wx, wy);
-        return _colorLUTs[WorldGen.biomeIndexAt(wy)][h | (WorldGen.materialAtWorld(wx, wy) << 8)];
+        return _colorLUTs[WorldGen.biomeIndexAt(wy)][WorldGen.colorIndex(h, WorldGen.materialAtWorld(wx, wy))];
     }
 
     function reset() {

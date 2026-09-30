@@ -339,7 +339,7 @@ var WorldGen = (function () {
                 var wt = (ax - inner) / cfg.wallRamp;
                 if (wt > 1) wt = 1;
                 wt = wt * wt * (3 - 2 * wt);
-                h = h + (cfg.wallTop - h) * wt;
+                h = h + ((_hm ? _hm.wallTop : cfg.wallTop) - h) * wt;
             }
         }
         return h;
@@ -422,7 +422,50 @@ var WorldGen = (function () {
     // Material 0 = the normal height palette, 1 = snow. Only a baked
     // heightmap has materials; the procedural world is always 0.
     var MAT_SNOW = 1;
+    var MAT_WALL = 2;   // baked heightmap only: the rim wall, by position
     var SNOW_COLOR = { r: 236, g: 238, b: 242 };
+
+    // ---- Height ceiling (option B) ----
+    // Chunk texels hold a 16-bit height, so a baked heightmap is not bound
+    // to 0-255. hmTop is where the strip's P99 land elevation lands; peaks
+    // above it ease ~12% higher, and the rim wall is raised above that.
+    // 200 reproduces the original 0-255 layout. ?hmTop=N overrides.
+    cfg.hmTop = 200;
+
+    // Colour index. Colour LUTs stay 256 entries per material, so heights
+    // above 255 are quantised: exact below 64 (water, beaches and the coast
+    // stay precise), compressed linearly from 64 to the wall top above that.
+    // When the wall top fits in 255 the mapping is the identity -- which is
+    // always the case for the procedural world.
+    var Q_EXACT = 64;
+    function _makeQuant(topH) {
+        if (topH <= 255) return null;
+        var tbl = new Uint8Array(topH + 1);
+        for (var h = 0; h <= topH; h++) {
+            tbl[h] = h < Q_EXACT ? h : Math.min(255, Q_EXACT + Math.round((h - Q_EXACT) * (255 - Q_EXACT) / (topH - Q_EXACT)));
+        }
+        return { table: tbl, top: topH };
+    }
+    // Quantised colour row for an integer height (0-255).
+    function colorRowForHeight(h) {
+        var q = _hmSrc ? (_hm || (_buildHm(), _hm)).quant : null;
+        if (h < 0) h = 0;
+        if (!q) return h > 255 ? 255 : h | 0;
+        return q.table[h > q.top ? q.top : h | 0];
+    }
+    // Representative height for a colour row (inverse of the above).
+    function heightForColorRow(r) {
+        var q = _hmSrc ? (_hm || (_buildHm(), _hm)).quant : null;
+        if (!q || r < Q_EXACT) return r;
+        return Q_EXACT + (r - Q_EXACT) * (q.top - Q_EXACT) / (255 - Q_EXACT);
+    }
+    // Whole LUT index for a height + material.
+    function colorIndex(h, mat) { return (mat << 8) | colorRowForHeight(h); }
+    // Table form for per-texel use in chunk generation (null = identity).
+    function colorRowTable() {
+        var q = _hmSrc ? (_hm || (_buildHm(), _hm)).quant : null;
+        return q ? q.table : null;
+    }
     cfg.snowlineM = 2800;
     cfg.snowEdgeM = 150;   // +- ragged-edge dither around the snowline
     try {
@@ -455,7 +498,8 @@ var WorldGen = (function () {
     cfg.hmDetailRadiusWU = 384;   // broad-shape blur radius, world units
     try {
         var _q = new URLSearchParams(location.search);
-        var _qk = _q.get('hmKnee'), _qd = _q.get('hmDetail'), _qn = _q.get('hmDown');
+        var _qk = _q.get('hmKnee'), _qd = _q.get('hmDetail'), _qn = _q.get('hmDown'), _qt = _q.get('hmTop');
+        if (_qt !== null && parseFloat(_qt) >= 60) cfg.hmTop = Math.min(4000, parseFloat(_qt));
         if (_qn !== null && parseFloat(_qn) > 0) cfg.hmDetailDown = parseFloat(_qn);
         if (_qk !== null && parseFloat(_qk) >= 0) cfg.hmKnee = parseFloat(_qk);
         if (_qd !== null && parseFloat(_qd) > 0) cfg.hmDetail = parseFloat(_qd);
@@ -505,13 +549,17 @@ var WorldGen = (function () {
     function _buildHm() {
         var meta = _hmSrc.meta, elev = _hmSrc.elev, opts = _hmSrc.opts;
         var st = meta.stats || {};
-        var landTop = opts.landTop || 200;
+        var landTop = opts.landTop || cfg.hmTop;
         var seaDepth = opts.seaDepth || 20;
         var knee = opts.knee !== undefined ? opts.knee : cfg.hmKnee;
         var gain = opts.detail !== undefined ? opts.detail : cfg.hmDetail;
         var gainDown = opts.detailDown !== undefined ? opts.detailDown : cfg.hmDetailDown;
         var p99 = Math.max(1, st.landP99 || 1), p5 = Math.max(1, -(st.seaP5 || -1));
-        var room = cfg.wallColorFrom - 1 - landTop;
+        // Headroom the top 1% of peaks ease into. At the default ceiling this
+        // is the gap under the old 225 wall-colour band (the wall is a
+        // material now, so height no longer has to stay below it); above
+        // that it scales with the ceiling.
+        var room = Math.max(24, Math.round(landTop * 0.12));
         var w = meta.length, hgt = meta.width, N = w * hgt, s = cfg.seaLevel;
         var denom = knee > 0 ? Math.log(1 + p99 / knee) : p99;
 
@@ -568,12 +616,15 @@ var WorldGen = (function () {
             }
         }
 
-        // 3. peaks above landTop ease into the headroom under the wall colour
-        //    instead of clipping into flat-topped mesas
+        // 3. peaks above landTop ease into the headroom instead of clipping
+        //    into flat-topped mesas
         for (i = 0; i < N; i++) {
             if (u[i] > landTop) u[i] = landTop + room * Math.tanh((u[i] - landTop) / room);
         }
-        _hm = { len: w, wid: hgt, h: u, landTop: landTop };
+        var maxH = landTop + room;
+        var wallTop = Math.max(cfg.wallTop, Math.round(maxH + 26));
+        _hm = { len: w, wid: hgt, h: u, landTop: landTop, wallTop: wallTop,
+                quant: _makeQuant(wallTop) };
     }
     function clearHeightmap() { _hmSrc = null; _hm = null; }
     function usingHeightmap() { return !!_hmSrc; }
@@ -643,7 +694,11 @@ var WorldGen = (function () {
     // Material from real elevation in metres (see MAT_SNOW). Callers that
     // already have the metres (chunk generation, interpolating a lattice)
     // use this directly; materialAtWorld samples them itself.
+    // Mid-ramp of the rim wall: beyond this X a baked heightmap paints wall.
+    function wallMaterialX() { return cfg.bandHalfWidth - cfg.wallRamp * 0.5; }
+
     function materialForMetres(m, x, y) {
+        if (_hmSrc && cfg.edgeWall && (x > wallMaterialX() || -x > wallMaterialX())) return MAT_WALL;
         if (m === null || m <= 0) return 0;
         return (m + _edgeHash(x, y) * 2 * cfg.snowEdgeM > cfg.snowlineM) ? MAT_SNOW : 0;
     }
@@ -663,7 +718,7 @@ var WorldGen = (function () {
         var s = cfg.seaLevel;
         var r, g, b;
 
-        if (cfg.edgeWall && h >= cfg.wallColorFrom) {
+        if (cfg.edgeWall && (_hmSrc ? mat === MAT_WALL : h >= cfg.wallColorFrom)) {
             var band = Math.floor(h) % 3;
             var v = 138 + band * 6;
             return (0xFF000000 | (v << 16) | (v << 8) | v) >>> 0;
@@ -677,7 +732,7 @@ var WorldGen = (function () {
         else {
             // A baked heightmap has no biomes: one palette over its own range.
             var bd = BIOME_DEFS[bidx] || BIOME_DEFS[0];
-            var top = _hmSrc ? (_hmSrc.opts.landTop || 200) : bd.maxHeight;
+            var top = _hmSrc ? (_hmSrc.opts.landTop || cfg.hmTop) : bd.maxHeight;
             var t = (top - s) > 0 ? (h - (s + 4)) / (top - (s + 4)) : 0;
             if (t < 0) t = 0; else if (t > 1) t = 1;
             var bands = _hmSrc ? HM_COLORS : bd.colors, picked = bands[bands.length - 1];
@@ -708,6 +763,10 @@ var WorldGen = (function () {
         metresAtWorld:       metresAtWorld,
         materialForMetres:   materialForMetres,
         materialAtWorld:     materialAtWorld,
+        colorIndex:          colorIndex,
+        colorRowTable:       colorRowTable,
+        heightForColorRow:   heightForColorRow,
+        wallMaterialX:       wallMaterialX,
         clearHeightmap:      clearHeightmap,
         usingHeightmap:      usingHeightmap,
         config:              cfg
