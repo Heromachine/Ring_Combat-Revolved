@@ -18,6 +18,11 @@ var HoverBikeRide = (function () {
     var MOUNT_RANGE = 20;
     var EYE_ABOVE_GROUND = 8;
     var BIKE_RADIUS = 7;
+    // The rider sits in the cockpit, not at the bike's anchor point: in
+    // speed-e.obj the cockpit (Cockpit_|_dark_upholstery) is centred at model
+    // x -1.10 vs the anchor at -0.095, i.e. 1.8 WU behind it at scale 1.8.
+    // At the anchor the view sat over the hood.
+    var SEAT_BACK = (1.10 - 0.095) * hoverBike.scale;
 
     function isMounted() { return mounted; }
 
@@ -56,8 +61,11 @@ var HoverBikeRide = (function () {
     }
 
     function placeRider() {
-        camera.x = hoverBike.x;
-        camera.y = hoverBike.y;
+        // SEAT_BACK behind the anchor, along the bike's heading (forward is
+        // (-sin yaw, -cos yaw)); height still from the surface under the bike.
+        var yaw = hoverBike.yaw || 0;
+        camera.x = hoverBike.x + Math.sin(yaw) * SEAT_BACK;
+        camera.y = hoverBike.y + Math.cos(yaw) * SEAT_BACK;
         camera.height = getSurfaceHeight(hoverBike.x, hoverBike.y) + EYE_ABOVE_GROUND;
         camera.velocityY = 0;
         camera.adsOffset = 0;
