@@ -105,6 +105,14 @@ var TerrainTrees = (function () {
         var m = WorldGen.metresAtWorld(x, y);
         if (m === null || m < cfg.beachM || m > cfg.treelineHiM) return null;
         if (WorldGen.config.edgeWall && Math.abs(x) > WorldGen.wallMaterialX() - 12) return null;
+        // Not in or right at the edge of a lake (lakes sit above sea level,
+        // so the elevation test alone does not catch them).
+        if (WorldGen.lakesInRect && WorldGen.lakesInRect(x - 12, y - 12, x + 12, y + 12)) {
+            for (var q = 0; q < 5; q++) {
+                var qx = x + (q === 1 ? 10 : q === 2 ? -10 : 0), qy = y + (q === 3 ? 10 : q === 4 ? -10 : 0);
+                if (WorldGen.heightAtWorld(qx, qy, 1) < WorldGen.waterSurfaceAt(qx, qy) + 1) return null;
+            }
+        }
         var elevF = 1 - _sstep(cfg.treelineLoM, cfg.treelineHiM, m);
         var mpw = _metresPerWU(), d = 12;
         var gx = (WorldGen.metresAtWorld(x + d, y) - WorldGen.metresAtWorld(x - d, y)) / (2 * d * mpw);

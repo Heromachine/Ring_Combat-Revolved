@@ -105,6 +105,8 @@ function _findSite(loY, hiY, halfW, seedTag) {
 
         var h = WorldGen.heightAtWorld(x, y, 1);
         if (h < WorldGen.config.seaLevel + WATER_CLEARANCE) continue;
+        // ...and not in a baked lake, whose surface is above sea level.
+        if (WorldGen.waterSurfaceAt && h < WorldGen.waterSurfaceAt(x, y) + WATER_CLEARANCE) continue;
 
         return { x: x, y: y, baseZ: h };
     }

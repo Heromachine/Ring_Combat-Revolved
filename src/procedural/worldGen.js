@@ -695,7 +695,98 @@ var WorldGen = (function () {
         var maxH = landTop + room;
         var wallTop = Math.max(cfg.wallTop, Math.round(maxH + 26));
         _hm = { len: w, wid: hgt, h: u, landTop: landTop, wallTop: wallTop,
-                quant: _makeQuant(wallTop) };
+                quant: _makeQuant(wallTop), lakeIds: null, lakeSurf: null };
+
+        // 4. lakes (lake_bake.py). Each lake's surface is its REAL spill level
+        //    through the same land curve (no relief boost). The boost can
+        //    deepen a lake's outlet -- a low notch in the rim -- below that
+        //    level (hmDown), which would drain it, so every pixel touching a
+        //    lake (8 neighbours) is raised to at least just above its surface:
+        //    an invisible levee. Water fills only where the floor is below the
+        //    surface, so bumps the boost raised inside a basin become islands.
+        var ids = opts.lakes;
+        if (ids && ids.length === N) {
+            var surf = new Float32Array(256).fill(Infinity);
+            var ll0 = (meta.lakes && meta.lakes.lakes) || [];
+            for (var q0 = 0; q0 < ll0.length; q0++) {
+                var lm = Math.max(0, ll0[q0].levelM);
+                var ls = s + (knee > 0 ? Math.log(1 + lm / knee) : lm) / denom * (landTop - s);
+                if (ls > landTop) ls = landTop + room * Math.tanh((ls - landTop) / room);
+                surf[ll0[q0].id] = ls;
+            }
+            // Visit only lake pixels (~4% of the strip) and push each of their
+            // non-lake 8-neighbours up to the lake's surface + 0.5.
+            var raised = 0;
+            for (var p0 = 0; p0 < N; p0++) {
+                var kk = ids[p0]; if (!kk) continue;
+                var need = surf[kk] + 0.5, ry = (p0 / w) | 0, cx = p0 - ry * w;
+                for (var dy8 = -1; dy8 <= 1; dy8++) {
+                    var ry2 = ry + dy8; if (ry2 < 0 || ry2 >= hgt) continue;
+                    for (var dx8 = -1; dx8 <= 1; dx8++) {
+                        var cx2 = cx + dx8; if (cx2 < 0) cx2 += w; else if (cx2 >= w) cx2 -= w;
+                        var q8 = ry2 * w + cx2;
+                        if (!ids[q8] && u[q8] < need) { u[q8] = need; raised++; }
+                    }
+                }
+            }
+            _hm.lakeRaised = raised;
+            // ...and every lake pixel's floor sits at least its REAL depth
+            // below the surface (through the curve's slope at that level):
+            // in small basins the boost could lift the whole floor above the
+            // water, leaving a baked lake dry.
+            var lvlM = new Float32Array(256);
+            for (var q1 = 0; q1 < ll0.length; q1++) lvlM[ll0[q1].id] = ll0[q1].levelM;
+            for (var pl = 0; pl < N; pl++) {
+                var kl = ids[pl]; if (!kl) continue;
+                var lv = Math.max(0, lvlM[kl]);
+                var unitsPerM = (landTop - s) / ((knee > 0 ? denom * (knee + lv) : denom));
+                var floorMax = surf[kl] - Math.max(1, (lv - elev[pl]) * unitsPerM);
+                if (u[pl] > floorMax) u[pl] = floorMax;
+            }
+            _hm.lakeIds = ids; _hm.lakeSurf = surf;
+            // world-space boxes, for chunk-level early-outs
+            var ll = (meta.lakes && meta.lakes.lakes) || [], boxes = [];
+            var wuX = 2 * cfg.bandHalfWidth / (hgt - 1), wuY = _L / w;
+            for (var b2 = 0; b2 < ll.length; b2++) {
+                var bb = ll[b2].bbox;          // [r0, c0, r1, c1]
+                boxes.push({ id: ll[b2].id, x0: -cfg.bandHalfWidth + (bb[0] - 1) * wuX, x1: -cfg.bandHalfWidth + (bb[2] + 1) * wuX,
+                             y0: (bb[1] - 1) * wuY, y1: (bb[3] + 1) * wuY });
+            }
+            _hm.lakeBoxes = boxes;
+        }
+    }
+
+    // Water surface at a position: the lake's surface inside a baked lake,
+    // otherwise sea level. Where the ground is below this, there is water.
+    function waterSurfaceAt(x, y) {
+        var s = cfg.seaLevel;
+        if (!_hmSrc) return s;
+        if (!_hm) _buildHm();
+        var m = _hm;
+        if (!m.lakeIds) return s;
+        var yy = ((y % _L) + _L) % _L;
+        var r = Math.round((x + cfg.bandHalfWidth) / (2 * cfg.bandHalfWidth) * (m.wid - 1));
+        if (r < 0 || r >= m.wid) return s;
+        var c = Math.round(yy / _L * m.len) % m.len;
+        var id = m.lakeIds[r * m.len + c];
+        return id ? Math.max(s, m.lakeSurf[id]) : s;
+    }
+    // Is any baked lake within this world rectangle? (y in any lap)
+    function lakesInRect(x0, y0, x1, y1) {
+        if (!_hmSrc) return false;
+        if (!_hm) _buildHm();
+        var bx = _hm.lakeBoxes;
+        if (!bx || !bx.length) return false;
+        for (var i = 0; i < bx.length; i++) {
+            var b = bx[i];
+            if (x1 < b.x0 || x0 > b.x1) continue;
+            // compare in this lap and the neighbouring ones
+            for (var lap = Math.floor(y0 / _L) - 1; lap <= Math.floor(y1 / _L) + 1; lap++) {
+                var o = lap * _L;
+                if (!(y1 < b.y0 + o || y0 > b.y1 + o)) return true;
+            }
+        }
+        return false;
     }
     function clearHeightmap() { _hmSrc = null; _hm = null; _clim = null; }
     function heightmapMeta() { return _hmSrc ? _hmSrc.meta : null; }
@@ -937,6 +1028,8 @@ var WorldGen = (function () {
         biomeCount:          biomeCount,
         biomeName:           biomeName,
         useHeightmap:        useHeightmap,
+        waterSurfaceAt:      waterSurfaceAt,
+        lakesInRect:         lakesInRect,
         heightmapMeta:       heightmapMeta,
         useClimate:          useClimate,
         climateAtWorld:      climateAtWorld,

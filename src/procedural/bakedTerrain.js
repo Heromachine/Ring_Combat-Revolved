@@ -46,7 +46,17 @@ var BakedTerrain = (function () {
             }).then(function (buf) {
                 var elev = new Int16Array(buf);
                 if (elev.length !== meta.length * meta.width) throw new Error('size mismatch');
-                WorldGen.useHeightmap(meta, elev);
+                // Lakes (lake_bake.py) are part of the terrain build, so they are
+                // fetched first; a missing file just means no lakes.
+                var lakesFile = meta.lakes && meta.lakes.file;
+                return (lakesFile ? fetch(BASE + lakesFile).then(function (r) { return r.ok ? r.arrayBuffer() : null; })
+                                              .catch(function () { return null; })
+                                  : Promise.resolve(null)).then(function (lb) {
+                var lakeOpts = {};
+                try {
+                    if (lb && new URLSearchParams(location.search).get('lakes') !== '0') lakeOpts.lakes = new Uint8Array(lb);
+                } catch (e) { if (lb) lakeOpts.lakes = new Uint8Array(lb); }
+                WorldGen.useHeightmap(meta, elev, lakeOpts);
                 _state = 'ready';
                 // Climate (tree placement) is optional: without it forests
                 // fall back to elevation/slope/noise only.
@@ -60,6 +70,7 @@ var BakedTerrain = (function () {
                 console.log('Baked terrain:', meta.generator, meta.length + 'x' + meta.width,
                     'land ' + Math.round(meta.stats.landFraction * 100) + '%');
                 if (typeof _loopActive !== 'undefined' && _loopActive) refreshWorld();
+                });
             });
         }).catch(function (e) {
             _state = 'failed';

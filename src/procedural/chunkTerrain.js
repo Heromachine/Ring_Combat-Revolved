@@ -132,6 +132,17 @@ var ChunkTerrain = (function () {
         var mlat = hmOn ? new Float32Array(N * N) : null;
         var mlatAll = mlat;   // kept for the rock speckle after the snow early-out
         var seaOn = hmOn && !!WorldGen.waterColor, seaH = WorldGen.config.seaLevel;
+        // Baked lakes (lake_bake.py) have their own surface; only chunks that
+        // overlap a lake pay the per-texel lookup.
+        var lakeHere = seaOn && WorldGen.lakesInRect && WorldGen.lakesInRect(ox, oy, ox + CHUNK, oy + CHUNK);
+        // Water surface on the same 8 WU lattice (one lookup per lattice
+        // point, not per texel); a texel takes the highest of its 4 corners.
+        var wlat = null;
+        if (lakeHere) {
+            wlat = new Float32Array(N * N);
+            for (var wj = 0; wj < N; wj++) for (var wi = 0; wi < N; wi++)
+                wlat[wj * N + wi] = Math.round(WorldGen.waterSurfaceAt(ox + wi * NOISE_STEP, oy + wj * NOISE_STEP));
+        }
         for (var j = 0; j < N; j++) {
             var wy = oy + j * NOISE_STEP;
             for (var i = 0; i < N; i++) {
@@ -222,7 +233,12 @@ var ChunkTerrain = (function () {
                 // (baked heightmap): there it flipped neighbouring texels between
                 // beach and water, a salt-and-pepper shoreline. Without it the
                 // waterline follows the smooth terrain contour.
-                if (!(seaOn && h > seaH - 2 && h < seaH + 2)) h += _detail(ox + x, wy2) * 2.0;
+                var ws = seaH;                                                   // water surface here
+                if (wlat) {
+                    var wa = wlat[r0 + i0], wb = wlat[r0 + i1], wc = wlat[r1 + i0], wd = wlat[r1 + i1];
+                    ws = wa > wb ? wa : wb; if (wc > ws) ws = wc; if (wd > ws) ws = wd;
+                }
+                if (!(seaOn && h > ws - 2 && h < ws + 2)) h += _detail(ox + x, wy2) * 2.0;
 
                 if (touching) {
                     var wx2 = ox + x;
@@ -240,9 +256,9 @@ var ChunkTerrain = (function () {
                 var wx3 = ox + x;
                 // Water (baked heightmap): store the flat SURFACE with the
                 // depth in the colour row; heightAt() recovers the floor.
-                if (seaOn && h < seaH && wx3 <= wallX && -wx3 <= wallX) {
-                    var dep = Math.round(seaH - h);
-                    out[rowBase + x] = (seaH | (((3 << 8) | (dep > 255 ? 255 : dep)) << 16)) >>> 0;
+                if (seaOn && h < ws && wx3 <= wallX && -wx3 <= wallX) {
+                    var dep = Math.round(ws - h);
+                    out[rowBase + x] = (ws | (((3 << 8) | (dep > 255 ? 255 : dep)) << 16)) >>> 0;
                     continue;
                 }
                 var hv = h < 0 ? 0 : (h > 65535 ? 65535 : h) | 0;
@@ -430,7 +446,10 @@ var ChunkTerrain = (function () {
         var ch = chunkAt(cx, cy);
         if (!ch) {
             var h = heightAt(wx, wy);
-            if (WorldGen.usingHeightmap && WorldGen.usingHeightmap() && h < WorldGen.config.seaLevel) h = WorldGen.config.seaLevel;
+            if (WorldGen.usingHeightmap && WorldGen.usingHeightmap()) {
+                var wsm = WorldGen.waterSurfaceAt ? WorldGen.waterSurfaceAt(wx, wy) : WorldGen.config.seaLevel;
+                if (h < wsm) h = wsm;
+            }
             return h;
         }
         var v = ch[(fy - cy * CHUNK) * CHUNK + (fx - cx * CHUNK)], m = (v >>> 16) >> 8;

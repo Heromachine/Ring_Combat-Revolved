@@ -190,12 +190,15 @@ function buildRingNoiseLOD() {
             // and an under-estimated ridge let objects behind it show through.
             var hMax = hmSea !== null ? WorldGen.maxHeightInRect(wx, wy, wx + dx, wy + dy) : null;
             var hOcc = (hMax !== null && hMax > h) ? hMax : h;
-            hgt[o] = (hmSea !== null && hOcc < hmSea) ? hmSea : hOcc;
+            var wsL = (hmSea !== null && WorldGen.waterSurfaceAt) ? WorldGen.waterSurfaceAt(wx, wy) : hmSea;
+            hgt[o] = (hmSea !== null && hOcc < wsL) ? wsL : hOcc;
             var hcol = WorldGen.colorHeightAt ? WorldGen.colorHeightAt(h, wx, wy) : h;
             col[o] = WorldGen.colorForHeightBiome(hcol, bio,
                 WorldGen.materialAtWorld ? WorldGen.materialAtWorld(wx, wy) : 0);
-            // Forests read as darker green from afar (terrainTrees.js).
-            if (typeof TerrainTrees !== 'undefined' && h >= WorldGen.config.seaLevel) col[o] = TerrainTrees.tintForest(col[o], wx, wy);
+            // Lakes (their own surface) are water too; forests read as darker
+            // green from afar (terrainTrees.js).
+            if (hmSea !== null && h < wsL) col[o] = WorldGen.waterColor(wsL - h);
+            else if (typeof TerrainTrees !== 'undefined' && h >= WorldGen.config.seaLevel) col[o] = TerrainTrees.tintForest(col[o], wx, wy);
         }
     }
     ringMip = { procedural: true, around: A, across: C, dy: dy, dx: dx,

@@ -74,7 +74,13 @@ function Render(){
     // FLOOR instead of the surface, with every sample fogged toward a water
     // colour by distance. Visibility shrinks and the fog darkens with depth.
     // Above water this costs one hoisted flag check per sample.
-    var _sea = (_chunks && WorldGen.usingHeightmap && WorldGen.usingHeightmap()) ? WorldGen.config.seaLevel : null;
+    // The water surface is the one at the camera's position -- sea level, or
+    // a baked lake's own level -- and only counts if the camera is over water.
+    var _sea = null;
+    if (_chunks && WorldGen.usingHeightmap && WorldGen.usingHeightmap()) {
+        var _wsC = WorldGen.waterSurfaceAt ? WorldGen.waterSurfaceAt(camera.x, camera.y) : WorldGen.config.seaLevel;
+        if (getRawTerrainHeight(camera.x, camera.y) < _wsC) _sea = _wsC;
+    }
     var _under = _sea !== null && camera.height < _sea;
     var _uDepth = _under ? _sea - camera.height : 0;
     underwaterState.active = _under; underwaterState.depth = _uDepth;
