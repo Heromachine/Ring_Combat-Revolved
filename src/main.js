@@ -193,10 +193,14 @@ function Draw(timestamp){
         RenderGreenCube();
         RenderShadowCube();
         Render();
+        // Cloud cover per sky block, before the backdrop so it can skip
+        // blocks the clouds hide completely (clouds.js).
+        if (typeof Clouds !== 'undefined') Clouds.prepare();
         // Draws the far side of the loop arcing overhead. Must run AFTER
         // Render(), which fills hiddeny[] -- the backdrop uses it to avoid
         // painting over near terrain. No-op while the ring is off.
         if (typeof RenderRingBackdrop === 'function') RenderRingBackdrop();
+        if (typeof Clouds !== 'undefined') Clouds.blend();
         var playerSprites = [];
         var _now = Date.now();
         var _myId = (typeof NakamaClient !== "undefined") ? NakamaClient.getUserId() : null;
@@ -219,6 +223,7 @@ function Draw(timestamp){
         var canopySprites = (typeof TerrainTrees !== 'undefined') ? TerrainTrees.visibleCanopies() : [];
         RenderItems(playerSprites.concat(enemySprites).concat(npcSprites).concat(canopySprites));
         if (typeof RenderFlashlight === 'function') RenderFlashlight();
+        if (typeof Clouds !== 'undefined') Clouds.rain();
         Flip();
         RenderTestTarget();
         if (!Multiplayer.isConnected()) DrawEnemyBars(screendata.context);

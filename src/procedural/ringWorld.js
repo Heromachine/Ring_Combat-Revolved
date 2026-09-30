@@ -347,6 +347,7 @@ function RenderRingBackdrop() {
     var u3x = -Ry * sE, u3y = Rx * sE, u3z = cE;  // up = forward x right
 
     var tanH = 1;   // half horizontal FOV: tan(45 deg) in this engine
+    var _clouds = (typeof Clouds !== 'undefined');
 
     for (var x = 0; x < sw; x += S) {
         var top = hiddeny[x];
@@ -356,6 +357,8 @@ function RenderRingBackdrop() {
         var sx = (2 * x / sw - 1) * tanH;
 
         for (var y = 0; y < top; y += S) {
+            // Fully clouded block: nothing of the far ring shows through.
+            if (_clouds && Clouds.opaqueAt(x, y)) continue;
             var sy = (hCy - y) / focal;
 
             var rxv = f3x + sx * r3x + sy * u3x;
