@@ -31,9 +31,11 @@ var TerrainTrees = (function () {
     //   small pine -- ~85 ft overall, 4 ft trunk, branches from 16 ft;
     //   large pine -- 50 ft of bare trunk before the branches, 8 ft trunk,
     //                 ~160 ft overall. The trunk runs up into the canopy.
+    //   giant pine -- 200 ft overall, 12 ft trunk, 70 ft bare trunk.
     var TREES = [
         { x: -330, y: -120, r: 2, trunkH: 55,  canopyBase: 16, canopyW: 30, canopyH: 70 },
-        { x: -440, y: -190, r: 4, trunkH: 105, canopyBase: 50, canopyW: 62, canopyH: 110 }
+        { x: -440, y: -190, r: 4, trunkH: 105, canopyBase: 50, canopyW: 62, canopyH: 110 },
+        { x: -600, y: -280, r: 6, trunkH: 140, canopyBase: 70, canopyW: 90, canopyH: 130 }
     ];
 
     // The old random billboard trees (items type 'tree', images/tree.png)

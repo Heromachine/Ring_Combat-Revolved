@@ -12,9 +12,12 @@ var HoverBikeRide = (function () {
     var ACCEL = 145;
     var BRAKE = 210;
     var COAST = 48;
-    var MOUNT_RANGE = 48;
-    var EYE_ABOVE_GROUND = 29;
-    var BIKE_RADIUS = 18;
+    // Sized for the ~13 x 7 unit bike (hoverBike.scale 1.8) and the 7-unit
+    // player eye: underside hovers 2 above the surface, body top ~4, a
+    // seated rider's eye ~8. (Were 48 / 29 / 18 for the 74-unit bike.)
+    var MOUNT_RANGE = 20;
+    var EYE_ABOVE_GROUND = 8;
+    var BIKE_RADIUS = 7;
 
     function isMounted() { return mounted; }
 
@@ -23,7 +26,7 @@ var HoverBikeRide = (function () {
             !hoverBike.destroyed && hoverBike.loaded && player.health > 0 &&
             Math.hypot(camera.x - hoverBike.x, camera.y - hoverBike.y) <= MOUNT_RANGE &&
             Math.abs(camera.height - playerHeightOffset -
-                getSurfaceHeight(hoverBike.x, hoverBike.y)) < 40;
+                getSurfaceHeight(hoverBike.x, hoverBike.y)) < 15;
     }
 
     function uiBlocked() {
