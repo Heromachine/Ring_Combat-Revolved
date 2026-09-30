@@ -212,7 +212,8 @@ function UpdateCamera(){
         var axisScale = input.aimToggled ? lookAxisScale.ads : lookAxisScale.hip;
         camera.angle = (camera.angle - input.lookX * gpSens * axisScale.horizontal) % (2 * Math.PI);
         if(camera.angle < 0) camera.angle += 2 * Math.PI;
-        camera.horizon = Math.max(-400, Math.min(600, camera.horizon - input.lookY * gpSens * 100 * axisScale.vertical));
+        // x focalLength: same angle per unit of stick as horizontal (see mouse.js).
+        camera.horizon = Math.max(-400, Math.min(600, camera.horizon - input.lookY * gpSens * camera.focalLength * axisScale.vertical));
     }
 
     if (riding) {

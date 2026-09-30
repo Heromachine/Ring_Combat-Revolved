@@ -45,7 +45,11 @@ function DetectMouseMove(e){
     var axisScale = input.aimToggled ? lookAxisScale.ads : lookAxisScale.hip;
     camera.angle=(camera.angle-e.movementX*sens*axisScale.horizontal)%(2*Math.PI);
     if(camera.angle<0)camera.angle+=2*Math.PI;
-    camera.horizon=Math.max(-400,Math.min(600,camera.horizon-e.movementY*(sens*100)*axisScale.vertical));
+    // Vertical look shifts the horizon in pixels; x focalLength turns that into
+    // the same ANGLE per count as horizontal (horizon px ~ focal * pitch rad).
+    // It was x100, which ran at 100/focal of horizontal: ~0.48x at fov 208,
+    // down to ~0.12x in a 4x scope (zoom raises focalLength).
+    camera.horizon=Math.max(-400,Math.min(600,camera.horizon-e.movementY*(sens*camera.focalLength)*axisScale.vertical));
 }
 
 function DetectMouseWheel(e){
