@@ -25,11 +25,24 @@ var TerrainTrees = (function () {
     // the ground at the centre. canopyBase: where the canopy's bottom sits
     // above the ground. canopyW / canopyH: billboard size (WU / height units).
     // Scale: the player's eye is 7 units above the ground (settings), so
-    // units read as roughly feet -- this is a ~85 ft pine with a 4 ft trunk.
-    // Placed front-left of spawn, clear of the box, so it is in view at spawn.
+    // units read as roughly feet. Both to the LEFT of spawn (turn ~70 deg
+    // left): straight ahead the 100-unit box blocks everything within
+    // ~59 deg. Side by side for comparison:
+    //   small pine -- ~85 ft overall, 4 ft trunk, branches from 16 ft;
+    //   large pine -- 50 ft of bare trunk before the branches, 8 ft trunk,
+    //                 ~160 ft overall. The trunk runs up into the canopy.
     var TREES = [
-        { x: -170, y: -200, r: 2, trunkH: 55, canopyBase: 16, canopyW: 30, canopyH: 70 }
+        { x: -330, y: -120, r: 2, trunkH: 55,  canopyBase: 16, canopyW: 30, canopyH: 70 },
+        { x: -440, y: -190, r: 4, trunkH: 105, canopyBase: 50, canopyW: 62, canopyH: 110 }
     ];
+
+    // The old random billboard trees (items type 'tree', images/tree.png)
+    // are hidden while the terrain trees are being tried; ?oldtrees=1 shows
+    // them again. spawnRandomItems() checks this.
+    function scatterTreesOn() {
+        try { return new URLSearchParams(location.search).get('oldtrees') === '1'; }
+        catch (e) { return false; }
+    }
 
     var _canopyImg = null;
     function canopyImage() {
@@ -93,6 +106,7 @@ var TerrainTrees = (function () {
     return {
         MAT_TRUNK: MAT_TRUNK, MAT_TRUNK_EDGE: MAT_TRUNK_EDGE,
         list: function () { return TREES; },
+        scatterTreesOn: scatterTreesOn,
         touching: touching,
         collides: collides,
         refresh: refresh

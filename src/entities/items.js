@@ -4,6 +4,9 @@
 "use strict";
 
 function spawnRandomItems(type, texture, options) {
+    // Random billboard trees are hidden while terrain trees are tried
+    // (terrainTrees.js; ?oldtrees=1 brings them back).
+    if (type === 'tree' && typeof TerrainTrees !== 'undefined' && !TerrainTrees.scatterTreesOn()) return;
     options = options || {};
     let step = options.step || 8;               // spacing (avoid too many)
     let chance = options.chance || 0.01;        // probability per tile
