@@ -8,8 +8,12 @@ var imageDataCache = {};
 var BASE_SIZE = 64; // single cached size per image
 
 function getImagePixelData(img) {
+    // Cached on the image itself first: the tree canopy's src is a data: URL
+    // hundreds of KB long, and looking that up by string for every canopy
+    // every frame cost more than drawing the far ones.
+    if (img._rcPixels) return img._rcPixels;
     var key = img.src;
-    if (imageDataCache[key]) return imageDataCache[key];
+    if (imageDataCache[key]) return (img._rcPixels = imageDataCache[key]);
 
     var canvas = document.createElement('canvas');
     canvas.width = BASE_SIZE;
@@ -18,6 +22,7 @@ function getImagePixelData(img) {
     ctx.drawImage(img, 0, 0, BASE_SIZE, BASE_SIZE);
     var data = ctx.getImageData(0, 0, BASE_SIZE, BASE_SIZE);
     imageDataCache[key] = data;
+    img._rcPixels = data;
     return data;
 }
 
@@ -36,6 +41,48 @@ function getSpriteSheetData(img) {
     return spriteSheetCache;
 }
 
+// Coarse occlusion buffer: the FARTHEST depth in each 8x8 screen tile,
+// taken from the depth buffer as the terrain pass left it. A sprite whose
+// depth is behind a tile's farthest pixel cannot show anywhere in that tile,
+// so the whole tile is skipped -- trees behind a hill, or behind the tree in
+// front of them, cost almost nothing. Items drawn later only bring depth
+// closer, and a tile a sprite draws into is re-taken afterwards
+// (refreshHiZTile), so it stays conservative -- it never hides anything that
+// should show. Built lazily, only once a large sprite needs it.
+var HIZ_SHIFT = 3, HIZ = 1 << HIZ_SHIFT;
+var _hiz = null, _hizTW = 0;
+function buildHiZ(depth, sw, sh) {
+    var tw = (sw + HIZ - 1) >> HIZ_SHIFT, th = (sh + HIZ - 1) >> HIZ_SHIFT;
+    if (!_hiz || _hiz.length !== tw * th) _hiz = new Float32Array(tw * th);
+    _hiz.fill(0);
+    _hizTW = tw;
+    for (var y = 0; y < sh; y++) {
+        var row = (y >> HIZ_SHIFT) * tw, p = y * sw;
+        for (var x = 0; x < sw; x += HIZ) {
+            var t = row + (x >> HIZ_SHIFT), m = _hiz[t], e = Math.min(sw, x + HIZ);
+            for (var q = p + x, qe = p + e; q < qe; q++) if (depth[q] > m) m = depth[q];
+            _hiz[t] = m;
+        }
+    }
+}
+
+// Re-take one tile's farthest depth after a sprite drew into it, so a
+// near canopy that covers a whole tile hides that tile from the trees
+// behind it (items are drawn nearest-first).
+function refreshHiZTile(depth, sw, sh, tx, ty) {
+    var xa = tx << HIZ_SHIFT, xb = Math.min(sw, xa + HIZ);
+    var ya = ty << HIZ_SHIFT, yb = Math.min(sh, ya + HIZ), m = 0;
+    for (var y = ya; y < yb; y++) {
+        for (var q = y * sw + xa, qe = y * sw + xb; q < qe; q++) {
+            var d = depth[q];
+            if (d > m) { m = d; if (m === Infinity) { _hiz[ty * _hizTW + tx] = m; return; } }
+        }
+    }
+    _hiz[ty * _hizTW + tx] = m;
+}
+
+var _colMap = new Int32Array(1024);
+
 function RenderItems(extraItems){
     var sw = screendata.canvas.width,
         sh = screendata.canvas.height,
@@ -45,7 +92,8 @@ function RenderItems(extraItems){
         cosYaw = Math.cos(camera.angle),
         rx = cosYaw, ry = -sinYaw,
         focal = camera.focalLength,
-        albedo = (typeof albedoBuffer === 'function') ? albedoBuffer() : null;
+        albedo = (typeof albedoBuffer === 'function') ? albedoBuffer() : null,
+        hizBuilt = false;
 
     // Project items using ground-plane distance (consistent with terrain rendering)
     var allItems = extraItems ? items.concat(extraItems) : items;
@@ -56,11 +104,15 @@ function RenderItems(extraItems){
         return {it, dx, dy, groundForward};
     });
 
-    // Filter valid + sort back-to-front (far items first)
+    // Filter valid + sort FRONT-to-back. Every item is alpha-tested (no
+    // blending) and writes depth, so the depth test gives the same picture in
+    // either order -- but nearest-first lets the depth test reject the
+    // hidden parts of everything behind before touching its texture, instead
+    // of painting far canopies only to paint over them again.
     projected = projected
         .filter(obj => obj.groundForward > 0.1 && obj.groundForward < camera.distance)
         .filter(obj => !(isAdmin && obj.it.type === 'tree'))
-        .sort((a,b) => b.groundForward - a.groundForward);
+        .sort((a,b) => (a.groundForward - (a.it.depthBias || 0)) - (b.groundForward - (b.it.depthBias || 0)));
 
     // Draw each item pixel-by-pixel with depth testing
     projected.forEach(obj => {
@@ -169,51 +221,68 @@ function RenderItems(extraItems){
             ? Math.floor(screenY - destH / 2)
             : Math.floor(screenY - destH);
 
-        // Draw each destination pixel, sampling from source
-        for (var py = 0; py < destH; py++) {
-            var sy = destY + py;
-            if (sy < 0 || sy >= sh) continue;
+        // Clip to the screen once, rather than testing every pixel.
+        var x0 = destX < 0 ? 0 : destX, x1 = Math.min(sw, destX + destW);
+        var y0 = destY < 0 ? 0 : destY, y1 = Math.min(sh, destY + destH);
+        if (x0 >= x1 || y0 >= y1) return;
+        var zTest = groundForward - _bias;
 
-            // Map destination Y to source Y (within frame region)
-            var sampY = Math.floor(py * srcH / destH) + srcOffY;
+        // Source byte offset for each visible destination column.
+        if (_colMap.length < x1 - x0) _colMap = new Int32Array((x1 - x0) * 2);
+        for (var cx = x0; cx < x1; cx++) {
+            _colMap[cx - x0] = (Math.floor((cx - destX) * srcW / destW) + srcOffX) * 4;
+        }
 
-            for (var px = 0; px < destW; px++) {
-                var sx = destX + px;
-                if (sx < 0 || sx >= sw) continue;
+        function span(ya, yb, xa, xb) {
+            for (var sy = ya; sy < yb; sy++) {
+                // Map destination Y to source Y (within frame region)
+                var srcRow = (Math.floor((sy - destY) * srcH / destH) + srcOffY) * srcStride * 4;
+                for (var sx = xa, bufIdx = sy * sw + xa; sx < xb; sx++, bufIdx++) {
+                    // Depth test - only draw if in front of terrain
+                    if (zTest >= depth[bufIdx]) continue;
+                    var srcIdx = srcRow + _colMap[sx - x0];
+                    if (pixels[srcIdx + 3] < 128) continue; // skip transparent pixels
 
-                var bufIdx = sy * sw + sx;
+                    var r = pixels[srcIdx];
+                    var g = pixels[srcIdx + 1];
+                    var b = pixels[srcIdx + 2];
+                    if (albedo) albedo[bufIdx] = (0xFF000000 | (b << 16) | (g << 8) | r) >>> 0;
+                    if (_itemLight !== 1) {
+                        r = (r * _itemLight) | 0;
+                        g = (g * _itemLight) | 0;
+                        b = (b * _itemLight) | 0;
+                    }
 
-                // Depth test - only draw if in front of terrain
-                if (groundForward - _bias >= depth[bufIdx]) continue;
-
-                // Map destination X to source X (within frame region)
-                var sampX = Math.floor(px * srcW / destW) + srcOffX;
-                var srcIdx = (sampY * srcStride + sampX) * 4;
-
-                var a = pixels[srcIdx + 3];
-                if (a < 128) continue; // skip transparent pixels
-
-                var r = pixels[srcIdx];
-                var g = pixels[srcIdx + 1];
-                var b = pixels[srcIdx + 2];
-                if (albedo) albedo[bufIdx] = (0xFF000000 | (b << 16) | (g << 8) | r) >>> 0;
-                if (_itemLight !== 1) {
-                    r = (r * _itemLight) | 0;
-                    g = (g * _itemLight) | 0;
-                    b = (b * _itemLight) | 0;
+                    // Write to buffer (ABGR format for Uint32Array on little-endian)
+                    buf32[bufIdx] = 0xFF000000 | (b << 16) | (g << 8) | r;
+                    // Items never wrote depth before -- occlusion between items
+                    // (sorted back-to-front already, so painter's algorithm
+                    // handled that fine) worked without it, but nothing drawn
+                    // AFTER items (the flashlight's post-process pass) could
+                    // tell an item was there: depth[bufIdx] still held whatever
+                    // the terrain pass left at that pixel, or Infinity (sky) for
+                    // any part of a tall sprite reaching above the terrain
+                    // silhouette -- exactly where a tree's canopy usually is.
+                    // Now items are drawn nearest-first, this is also what
+                    // hides the items behind.
+                    depth[bufIdx] = zTest;
                 }
+            }
+        }
 
-                // Write to buffer (ABGR format for Uint32Array on little-endian)
-                buf32[bufIdx] = 0xFF000000 | (b << 16) | (g << 8) | r;
-                // Items never wrote depth before -- occlusion between items
-                // (sorted back-to-front already, so painter's algorithm
-                // handled that fine) worked without it, but nothing drawn
-                // AFTER items (the flashlight's post-process pass) could
-                // tell an item was there: depth[bufIdx] still held whatever
-                // the terrain pass left at that pixel, or Infinity (sky) for
-                // any part of a tall sprite reaching above the terrain
-                // silhouette -- exactly where a tree's canopy usually is.
-                depth[bufIdx] = groundForward - _bias;
+        // Small sprites: just draw. Large ones: walk the occlusion tiles and
+        // skip every tile the terrain already hides.
+        if ((x1 - x0) * (y1 - y0) < HIZ * HIZ * 4) { span(y0, y1, x0, x1); return; }
+        if (!hizBuilt) { buildHiZ(depth, sw, sh); hizBuilt = true; }
+        var tx0 = x0 >> HIZ_SHIFT, tx1 = (x1 - 1) >> HIZ_SHIFT;
+        var ty0 = y0 >> HIZ_SHIFT, ty1 = (y1 - 1) >> HIZ_SHIFT;
+        for (var ty = ty0; ty <= ty1; ty++) {
+            var ya = Math.max(y0, ty << HIZ_SHIFT), yb = Math.min(y1, (ty + 1) << HIZ_SHIFT);
+            var trow = ty * _hizTW;
+            for (var tx = tx0; tx <= tx1; tx++) {
+                if (zTest >= _hiz[trow + tx]) continue;   // tile fully hidden
+                span(ya, yb, Math.max(x0, tx << HIZ_SHIFT), Math.min(x1, (tx + 1) << HIZ_SHIFT));
+                refreshHiZTile(depth, sw, sh, tx, ty);
             }
         }
     });
