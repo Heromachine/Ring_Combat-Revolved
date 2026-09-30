@@ -643,6 +643,31 @@ var WorldGen = (function () {
                 : s - seabedDepth(-m);
         }
 
+        // 1b. distance (px) to the nearest baked lake, up to LAKE_FADE_PX, by a
+        //     multi-source BFS from lake pixels -- touches only pixels near
+        //     lakes. Used to fade the relief boost out around lakes (step 2).
+        var LAKE_KEEP_PX = 6, LAKE_FADE_PX = 20;     // ~50 WU true terrain, boost back by ~160 WU
+        var LAKE_LOWER = 1;                          // lakes sit this far under their spill level
+        var lakeDist = null, lids = opts.lakes;
+        if (lids && lids.length === N) {
+            lakeDist = new Uint8Array(N).fill(255);
+            var lakeNear = new Uint8Array(N);                 // which lake is nearest
+            var qA = new Int32Array(N), qh = 0, qt = 0;
+            for (var li = 0; li < N; li++) if (lids[li]) { lakeDist[li] = 0; lakeNear[li] = lids[li]; qA[qt++] = li; }
+            while (qh < qt) {
+                var pq = qA[qh++], dq = lakeDist[pq];
+                if (dq >= LAKE_FADE_PX) continue;
+                var ryq = (pq / w) | 0, cxq = pq - ryq * w;
+                for (var nk = 0; nk < 4; nk++) {
+                    var nr = ryq + (nk === 2 ? -1 : nk === 3 ? 1 : 0), nc = cxq + (nk === 0 ? -1 : nk === 1 ? 1 : 0);
+                    if (nr < 0 || nr >= hgt) continue;
+                    if (nc < 0) nc += w; else if (nc >= w) nc -= w;
+                    var np = nr * w + nc;
+                    if (lakeDist[np] === 255) { lakeDist[np] = dq + 1; lakeNear[np] = lakeNear[pq]; qA[qt++] = np; }
+                }
+            }
+        }
+
         // 2. amplify local land relief around a land-only broad shape, so the
         //    sea never drags a coast's baseline down into a cliff. The broad
         //    shape is smooth by definition, so it is computed on a grid k
@@ -681,7 +706,17 @@ var WorldGen = (function () {
                     var b0 = num[y1 * cw + x0], b1 = num[y1 * cw + x1];
                     var base = (a0 + (a1 - a0) * tx) + ((b0 + (b1 - b0) * tx) - (a0 + (a1 - a0) * tx)) * ty;
                     var d = u[i] - base;
-                    var h2 = base + d * (d > 0 ? gain : Math.min(gain, gainDown));
+                    var gUp = gain, gDn = Math.min(gain, gainDown);
+                    // Near a lake the terrain stays true to the real data: a
+                    // real basin's rim is at or above its spill level, so the
+                    // boost (which pushes valley floors DOWN) must not touch
+                    // it, or the lake ends up perched above its own shore.
+                    if (lakeDist && lakeDist[i] < LAKE_FADE_PX) {
+                        var ft = (lakeDist[i] - LAKE_KEEP_PX) / (LAKE_FADE_PX - LAKE_KEEP_PX);
+                        ft = ft < 0 ? 0 : (ft > 1 ? 1 : ft * ft * (3 - 2 * ft));
+                        gUp = 1 + (gUp - 1) * ft; gDn = 1 + (gDn - 1) * ft;
+                    }
+                    var h2 = base + d * (d > 0 ? gUp : gDn);
                     u[i] = h2 > s + 0.5 ? h2 : s + 0.5;   // land stays land
                 }
             }
@@ -712,22 +747,17 @@ var WorldGen = (function () {
                 var lm = Math.max(0, ll0[q0].levelM);
                 var ls = s + (knee > 0 ? Math.log(1 + lm / knee) : lm) / denom * (landTop - s);
                 if (ls > landTop) ls = landTop + room * Math.tanh((ls - landTop) / room);
-                surf[ll0[q0].id] = ls;
+                surf[ll0[q0].id] = Math.max(s + 0.5, ls - LAKE_LOWER);   // a little under the spill level
             }
-            // Visit only lake pixels (~4% of the strip) and push each of their
-            // non-lake 8-neighbours up to the lake's surface + 0.5.
-            var raised = 0;
+            // Levee: any non-lake ground within LEVEE_PX of a lake that is still
+            // below its surface (spots where the real rim itself dips, or two
+            // lakes meet) is raised to surface + 0.5.
+            var LEVEE_PX = 3, raised = 0;
             for (var p0 = 0; p0 < N; p0++) {
-                var kk = ids[p0]; if (!kk) continue;
-                var need = surf[kk] + 0.5, ry = (p0 / w) | 0, cx = p0 - ry * w;
-                for (var dy8 = -1; dy8 <= 1; dy8++) {
-                    var ry2 = ry + dy8; if (ry2 < 0 || ry2 >= hgt) continue;
-                    for (var dx8 = -1; dx8 <= 1; dx8++) {
-                        var cx2 = cx + dx8; if (cx2 < 0) cx2 += w; else if (cx2 >= w) cx2 -= w;
-                        var q8 = ry2 * w + cx2;
-                        if (!ids[q8] && u[q8] < need) { u[q8] = need; raised++; }
-                    }
-                }
+                var dl = lakeDist[p0];
+                if (dl === 0 || dl > LEVEE_PX) continue;
+                var need = surf[lakeNear[p0]] + 0.5;
+                if (u[p0] < need) { u[p0] = need; raised++; }
             }
             _hm.lakeRaised = raised;
             // ...and every lake pixel's floor sits at least its REAL depth
