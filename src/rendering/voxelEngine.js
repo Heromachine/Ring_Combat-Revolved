@@ -78,17 +78,19 @@ function Render(){
     var _under = _sea !== null && camera.height < _sea;
     var _uDepth = _under ? _sea - camera.height : 0;
     underwaterState.active = _under; underwaterState.depth = _uDepth;
-    var _uInvVis = 0, _fR = 0, _fG = 0, _fB = 0, _fogF = 0, _uwet = false, _bedCol = 0;
+    var _uwet = false, _bedCol = 0;
     if (_under) {
-        _uInvVis = (1 + _uDepth / 30) / 260;          // ~260 WU at the surface, ~110 at 40 deep
+        // Fog itself is a post-pass over the depth buffer (underwaterFog(),
+        // run from Flip()), so buildings, the cube, items and remote players
+        // -- all drawn with depth -- fog by distance exactly like terrain.
+        underwaterState.invVis = (1 + _uDepth / 30) / 260;   // ~260 WU at the surface, ~110 at 40 deep
         var _dk = Math.exp(-_uDepth / 90);
-        _fR = 22 * _dk; _fG = 64 * _dk; _fB = 84 * _dk;
+        underwaterState.fog = [22 * _dk, 64 * _dk, 84 * _dk];
         _bedCol = WorldGen.seabedColor(_uDepth);
     }
 
     hiddeny.fill(sh);
     for(var z=1;z<camera.distance;z+=deltaz){
-        if(_under) _fogF = 1 - Math.exp(-z * _uInvVis);
         var plx=-cosang*z-sinang*z,ply=sinang*z-cosang*z,prx=cosang*z-sinang*z,pry=-sinang*z-cosang*z,dx=(prx-plx)/sw,dy=(pry-ply)/sw;
         plx+=camera.x;ply+=camera.y;var invz = camera.focalLength / z;
         for(var i=0;i<sw;i++){
@@ -151,12 +153,7 @@ function Render(){
                 for(var k=heightonscreen|0;k<hiddeny[i];k++){
                     var idx=k*sw+i;
                     if(z<depth[idx]){
-                        var _dc=_col;
-                        if(_under){
-                            var _bc=_uwet?_bedCol:_col, _br=_bc&255, _bg=(_bc>>8)&255, _bb=(_bc>>16)&255;
-                            _dc=(0xFF000000|((_bb+(_fB-_bb)*_fogF)<<16)|((_bg+(_fG-_bg)*_fogF)<<8)|(_br+(_fR-_br)*_fogF))>>>0;
-                        }
-                        screendata.buf32[idx]=_dc;depth[idx]=z;if(_albedo)_albedo[idx]=_raw;
+                        screendata.buf32[idx]=(_under&&_uwet)?_bedCol:_col;depth[idx]=z;if(_albedo)_albedo[idx]=_raw;
                     }
                 }
                 hiddeny[i]=heightonscreen;
@@ -165,11 +162,27 @@ function Render(){
         }
         if(z>1000)deltaz+=0.02;else deltaz+=0.005;
     }
-    if(_under){
-        // Nothing above the floor is visible through the water: fill every
-        // pixel the terrain did not write (sky) with the fog colour.
-        var _fogCol=(0xFF000000|(_fB<<16)|(_fG<<8)|_fR)>>>0, _buf=screendata.buf32;
-        for(var _p=0;_p<_buf.length;_p++){ if(depth[_p]===Infinity) _buf[_p]=_fogCol; }
+}
+
+// Underwater fog: blend every pixel toward the water colour by its OWN
+// depth-buffer distance -- terrain, buildings, items, players alike; sky
+// (infinite depth) becomes pure fog. Run once per frame, after everything
+// with depth has drawn and before the HUD (see Flip()). The falloff is a
+// 1024-entry table in 4 WU steps, so the pass is one read + blend per pixel.
+var _uwFogLut = new Float32Array(1024);
+function underwaterFog() {
+    var st = underwaterState;
+    if (!st.active) return;
+    var buf = screendata.buf32, depth = screendata.depthBuffer, n = buf.length;
+    var inv = st.invVis, fr = st.fog[0], fg = st.fog[1], fb = st.fog[2];
+    for (var k = 0; k < 1024; k++) _uwFogLut[k] = 1 - Math.exp(-(k * 4) * inv);
+    var fogCol = (0xFF000000 | (fb << 16) | (fg << 8) | fr) >>> 0;
+    for (var p = 0; p < n; p++) {
+        var d = depth[p];
+        if (d === Infinity) { buf[p] = fogCol; continue; }
+        var qi = (d * 0.25) | 0, f = _uwFogLut[qi > 1023 ? 1023 : qi];
+        var c = buf[p], r = c & 255, g = (c >> 8) & 255, b = (c >> 16) & 255;
+        buf[p] = (0xFF000000 | ((b + (fb - b) * f) << 16) | ((g + (fg - g) * f) << 8) | (r + (fr - r) * f)) >>> 0;
     }
 }
 

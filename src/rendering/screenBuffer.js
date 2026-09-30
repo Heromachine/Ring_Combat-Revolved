@@ -121,6 +121,7 @@ function albedoBuffer(){
 }
 
 function Flip(){
+    if (typeof underwaterFog === 'function') underwaterFog();
     screendata.imagedata.data.set(screendata.buf8);
     screendata.context.putImageData(screendata.imagedata,0,0);
     // Underwater: blur the 3D view (not the HUD, which is drawn after Flip),

@@ -185,7 +185,12 @@ function buildRingNoiseLOD() {
             var o = j * C + i;
             // Baked heightmap: water is a flat surface at sea level (the
             // colour below still comes from the floor depth).
-            hgt[o] = (hmSea !== null && h < hmSea) ? hmSea : h;
+            // Heightmap: the cell's HIGHEST point, not one sample -- this grid
+            // is also the stand-in for chunks that have not streamed in yet,
+            // and an under-estimated ridge let objects behind it show through.
+            var hMax = hmSea !== null ? WorldGen.maxHeightInRect(wx, wy, wx + dx, wy + dy) : null;
+            var hOcc = (hMax !== null && hMax > h) ? hMax : h;
+            hgt[o] = (hmSea !== null && hOcc < hmSea) ? hmSea : hOcc;
             var hcol = WorldGen.colorHeightAt ? WorldGen.colorHeightAt(h, wx, wy) : h;
             col[o] = WorldGen.colorForHeightBiome(hcol, bio,
                 WorldGen.materialAtWorld ? WorldGen.materialAtWorld(wx, wy) : 0);

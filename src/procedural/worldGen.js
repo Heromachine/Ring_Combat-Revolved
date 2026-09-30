@@ -704,6 +704,27 @@ var WorldGen = (function () {
         return _hm.h[r * _hm.len + c];
     }
 
+    // Highest processed height over a world rectangle (wraps along Y), read
+    // straight from the strip, or null without a heightmap. For coarse
+    // occluders: a single point sample under-estimates a mountain LOD cell by
+    // a median 25 / p90 94 height units, which let buildings show over
+    // ridges until the real chunks streamed in.
+    function maxHeightInRect(x0, y0, x1, y1) {
+        if (!_hmSrc) return null;
+        if (!_hm) _buildHm();
+        var m = _hm, H = m.h, len = m.len, wid = m.wid, top = -Infinity;
+        var span = 2 * cfg.bandHalfWidth;
+        var r0 = Math.floor((x0 + cfg.bandHalfWidth) / span * (wid - 1));
+        var r1 = Math.ceil((x1 + cfg.bandHalfWidth) / span * (wid - 1));
+        if (r0 < 0) r0 = 0; if (r1 > wid - 1) r1 = wid - 1;
+        var c0 = Math.floor(y0 / _L * len), c1 = Math.ceil(y1 / _L * len);
+        for (var c = c0; c <= c1; c++) {
+            var cc = ((c % len) + len) % len;
+            for (var r = r0; r <= r1; r++) { var v = H[r * len + cc]; if (v > top) top = v; }
+        }
+        return top;
+    }
+
     function _bakedHeight(x, yy) {
         var m = _hm;
         var fr = (x + cfg.bandHalfWidth) / (2 * cfg.bandHalfWidth) * (m.wid - 1);
@@ -882,6 +903,7 @@ var WorldGen = (function () {
         materialForMetres:   materialForMetres,
         materialAtWorld:     materialAtWorld,
         colorIndex:          colorIndex,
+        maxHeightInRect:     maxHeightInRect,
         speckleAt:           speckleAt,
         waterColor:          waterColor,
         seabedColor:         seabedColor,
