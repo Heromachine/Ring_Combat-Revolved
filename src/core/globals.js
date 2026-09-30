@@ -21,7 +21,11 @@ var camera = {
 var enemies = [];
 
 var player={health:100,shield:100,maxShield:100,shieldRegenRate:5,shieldRegenDelay:4000,lastDamageTime:0,
-            isCrouching:false,moveSpeed:1.5,sprintMultiplier:2,
+            // Speeds: 1 WU ~ 1 ft (eye height 7) and movement is moveSpeed *
+            // 30 WU per second, so moveSpeed = mph * 5280/3600 / 30. Jog 12 mph,
+            // sprint 20 mph (were 1.5 / x2 = ~31 / ~61 mph). Set in mph via
+            // the settings sliders (jogMph / sprintMph).
+            isCrouching:false,moveSpeed:12*5280/3600/30,sprintMultiplier:20/12,
             // Charged jump system
             jumpMinStrength:3,      // tap jump
             jumpMaxStrength:12,     // fully charged (basketball player ~1m vertical)

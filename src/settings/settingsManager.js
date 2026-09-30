@@ -1,3 +1,19 @@
+// ---- Movement speeds in mph ----
+// 1 WU ~ 1 ft and movement runs at moveSpeed * 30 WU/s (camera.js), so
+// mph = moveSpeed * 30 * 3600/5280.
+var _MPH_PER_UNIT = 30 * 3600 / 5280;
+function _jogMph() { return player.moveSpeed * _MPH_PER_UNIT; }
+function _sprintMph() { return player.moveSpeed * player.sprintMultiplier * _MPH_PER_UNIT; }
+function _setSpeedsMph(jog, sprint) {
+    if (!(jog > 0)) jog = 12;
+    if (!(sprint >= jog)) sprint = jog;
+    player.moveSpeed = jog / _MPH_PER_UNIT;
+    player.sprintMultiplier = sprint / jog;
+    var j = document.getElementById('jogMph'), sp = document.getElementById('sprintMph');
+    if (j) { j.value = jog; document.getElementById('jogMph-value').innerText = jog.toFixed(1); }
+    if (sp) { sp.value = sprint; document.getElementById('sprintMph-value').innerText = sprint.toFixed(1); }
+}
+
 // ===============================
 // Settings Manager - Slider bindings and persistence
 // ===============================
@@ -171,16 +187,13 @@ function setupSliders() {
         document.getElementById('jumpMax-value').innerText = player.jumpMaxStrength;
     });
 
-    // Walk speed slider
-    document.getElementById('walkSpeed').addEventListener('input', function(e){
-        player.moveSpeed = parseFloat(e.target.value);
-        document.getElementById('walkSpeed-value').innerText = player.moveSpeed.toFixed(1);
+    // Jog / sprint speed sliders, in mph (see globals.js: moveSpeed is
+    // mph * 5280/3600 / 30, sprint is a multiplier of it).
+    document.getElementById('jogMph').addEventListener('input', function(e){
+        _setSpeedsMph(parseFloat(e.target.value), _sprintMph());
     });
-
-    // Sprint multiplier slider
-    document.getElementById('sprintMultiplier').addEventListener('input', function(e){
-        player.sprintMultiplier = parseFloat(e.target.value);
-        document.getElementById('sprintMultiplier-value').innerText = player.sprintMultiplier.toFixed(1);
+    document.getElementById('sprintMph').addEventListener('input', function(e){
+        _setSpeedsMph(_jogMph(), parseFloat(e.target.value));
     });
 
     // Bullet size slider
@@ -518,8 +531,8 @@ function getAllSettings() {
         crouchHeight: player.crouchHeight,
         jumpMin: player.jumpMinStrength,
         jumpMax: player.jumpMaxStrength,
-        walkSpeed: player.moveSpeed,
-        sprintMultiplier: player.sprintMultiplier,
+        jogMph: +_jogMph().toFixed(1),
+        sprintMph: +_sprintMph().toFixed(1),
         bulletSize: bulletSize,
         barrelDistance: gunModel.barrelDistance,
         // Gun visual position (gunViewModel — independent from gun mechanics)
@@ -627,15 +640,11 @@ function applySettings(s) {
         document.getElementById('jumpMax').value = s.jumpMax;
         document.getElementById('jumpMax-value').innerText = s.jumpMax;
     }
-    if (s.walkSpeed !== undefined) {
-        player.moveSpeed = s.walkSpeed;
-        document.getElementById('walkSpeed').value = s.walkSpeed;
-        document.getElementById('walkSpeed-value').innerText = s.walkSpeed.toFixed(1);
-    }
-    if (s.sprintMultiplier !== undefined) {
-        player.sprintMultiplier = s.sprintMultiplier;
-        document.getElementById('sprintMultiplier').value = s.sprintMultiplier;
-        document.getElementById('sprintMultiplier-value').innerText = s.sprintMultiplier.toFixed(1);
+    // Speeds are saved in mph. Older saves carried walkSpeed / sprintMultiplier
+    // in raw units at the old ~31 / ~61 mph defaults; those are deliberately
+    // ignored so the new 12 / 20 mph defaults take effect.
+    if (s.jogMph !== undefined || s.sprintMph !== undefined) {
+        _setSpeedsMph(s.jogMph !== undefined ? s.jogMph : _jogMph(), s.sprintMph !== undefined ? s.sprintMph : _sprintMph());
     }
     if (s.bulletSize !== undefined) {
         bulletSize = s.bulletSize;

@@ -5,6 +5,7 @@
 
 // Physics helpers
 var MAX_SLOPE=2;
+var SLOPE_PROBE=4;   // WU ahead over which the walkable slope is measured (see canMoveTo)
 var PLAYER_RADIUS = 10; // Player collision radius for cube collision
 var PUSH_OUT_BUFFER = 5; // Extra buffer to prevent camera clipping on rotation
 var isOnGround=()=>camera.height<=getGroundHeight(camera.x,camera.y)+0.1;
@@ -185,11 +186,18 @@ var canMoveTo=(nx,ny)=>{
 
     // Original slope checking (only when on ground)
     if(!isOnGround())return true;
-    var curH=getGroundHeight(camera.x,camera.y),newH=getGroundHeight(nx,ny);
-    if(newH<=curH)return true;
+    // Measure the slope over at least SLOPE_PROBE WU ahead, not over this
+    // frame's step: terrain texels carry ~+-1 unit of roughness, so over a
+    // sub-unit step (a 12 mph jog at 60 fps moves ~0.3 WU a frame) a 1-2 unit
+    // bump read as a slope far above MAX_SLOPE and stalled the player on
+    // ordinary ground.
     var horizDist=Math.hypot(nx-camera.x,ny-camera.y);
     if(!horizDist)return true;
-    return (newH-curH)/horizDist<=MAX_SLOPE;
+    var probe=Math.max(horizDist,SLOPE_PROBE);
+    var curH=getGroundHeight(camera.x,camera.y);
+    var aheadH=getGroundHeight(camera.x+(nx-camera.x)/horizDist*probe,camera.y+(ny-camera.y)/horizDist*probe);
+    if(aheadH<=curH)return true;
+    return (aheadH-curH)/probe<=MAX_SLOPE;
 };
 
 // Main camera update function - handles movement, jumping, shooting
@@ -204,6 +212,12 @@ function UpdateCamera(){
     var current=Date.now(),deltaTime=(current-time)*0.03,
         isSprinting = input.sprint || input.gpSprint,
         baseSpeed=player.moveSpeed*(isSprinting?player.sprintMultiplier:1)*deltaTime,nx,ny,slopeMult;
+    // Keyboard: forward/back and strafe each step by baseSpeed, so a diagonal
+    // (e.g. W+A) covered sqrt(2) x the distance. Scale both steps by 1/sqrt(2)
+    // when one of each axis is held; they stay separate steps so sliding
+    // along an obstacle on one axis still works. (The stick path below
+    // already caps the combined magnitude at 1.)
+    if ((input.forward !== input.backward) && (input.left !== input.right)) baseSpeed *= Math.SQRT1_2;
     var riding = typeof HoverBikeRide !== 'undefined' && HoverBikeRide.isMounted();
 
     // Gamepad look (Right Stick)
