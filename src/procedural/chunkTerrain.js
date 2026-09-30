@@ -64,7 +64,8 @@ var ChunkTerrain = (function () {
     // Material 3 (water, baked heightmap only) is indexed by depth, not
     // height: its row is units below the surface. Materials 4/5 are tree
     // trunk core/edge (terrainTrees.js): row = trunk height above ground.
-    var LUT_SIZE = 1536;
+    // Material 6 is forest floor under a canopy: ordinary ground, darker.
+    var LUT_SIZE = 1792;
     function _buildColorLUTs() {
         var n = WorldGen.biomeCount();
         _colorLUTs = [];
@@ -158,8 +159,7 @@ var ChunkTerrain = (function () {
         var rowTbl = WorldGen.colorRowTable ? WorldGen.colorRowTable() : null;
         var rowTop = rowTbl ? rowTbl.length - 1 : 255;
         var wallX = (hmOn && WorldGen.config.edgeWall) ? WorldGen.wallMaterialX() : Infinity;
-        // Tree trunks overlapping this chunk (terrainTrees.js), tops resolved.
-        var trunks = (typeof TerrainTrees !== 'undefined') ? TerrainTrees.touching(ox, oy, CHUNK) : null;
+
         // Rock speckle (WorldGen.colorHeightAt, after VoxelMaster-Minimal):
         // colour-only, and only on rocky ground, so skip it for the whole
         // chunk when no lattice point reaches the rock bands.
@@ -283,21 +283,35 @@ var ChunkTerrain = (function () {
                 }
                 var hr = hc > rowTop ? rowTop : hc;
                 var crow = rowTbl ? rowTbl[hr] : hr;
-                var texel = (hv | (((mat << 8) | crow) << 16)) >>> 0;
-                if (trunks) {
-                    // Trunk: store its flat TOP for drawing and its height
-                    // above this texel's ground in the row (heightAt subtracts
-                    // it), core vs darker edge ring as two materials.
-                    for (var tk = 0; tk < trunks.length; tk++) {
-                        var tr = trunks[tk], tdx = wx3 - tr.x, tdy = wy2 - tr.y, td2 = tdx * tdx + tdy * tdy;
-                        if (td2 > tr.r * tr.r) continue;
-                        var trow = tr.top - hv; if (trow < 0) trow = 0; else if (trow > 255) trow = 255;
-                        var tmat = td2 > (tr.r - 1) * (tr.r - 1) ? 5 : 4;
-                        texel = ((hv + trow) | (((tmat << 8) | trow) << 16)) >>> 0;
-                        break;
-                    }
-                }
-                out[rowBase + x] = texel;
+                out[rowBase + x] = (hv | (((mat << 8) | crow) << 16)) >>> 0;
+            }
+        }
+
+        // Trees (terrainTrees.js), stamped after the ground so each touches
+        // only its own texels. Forest floor first -- plain ground (material
+        // 0) under the inner part of a canopy turns darker (material 6),
+        // which is also what makes forests read from a distance -- then the
+        // trunk: its flat TOP is stored for drawing and its height above
+        // this texel's ground goes in the row (heightAt subtracts it), core
+        // vs darker edge ring as materials 4 / 5. Water texels are skipped.
+        if (hmOn && typeof TerrainTrees !== 'undefined') {
+            var trees = TerrainTrees.touching(ox, oy, CHUNK);
+            for (var tk = 0; tk < trees.length; tk++) {
+                var tr = trees[tk], fr = tr.canopyW * 0.32;
+                _stampDisc(out, ox, oy, tr.x, tr.y, fr, function (v) {
+                    if (((v >>> 16) >> 8) !== 0) return v;
+                    return ((v & 0xFFFF) | ((((6 << 8) | ((v >>> 16) & 255))) << 16)) >>> 0;
+                });
+            }
+            for (tk = 0; tk < trees.length; tk++) {
+                var tt = trees[tk], rr1 = (tt.r - 1) * (tt.r - 1);
+                _stampDisc(out, ox, oy, tt.x, tt.y, tt.r, function (v, d2) {
+                    var m0 = (v >>> 16) >> 8;
+                    if (m0 === 3) return v;                              // no trunks in water
+                    var g = (m0 === 4 || m0 === 5) ? (v & 0xFFFF) - ((v >>> 16) & 255) : (v & 0xFFFF);
+                    var row = tt.top - g; if (row < 0) row = 0; else if (row > 255) row = 255;
+                    return ((g + row) | ((((d2 > rr1 ? 5 : 4) << 8) | row) << 16)) >>> 0;
+                });
             }
         }
 
@@ -316,6 +330,21 @@ var ChunkTerrain = (function () {
             ? WorldGen.biomeIndexAt(oy + CHUNK / 2) : 0;
 
         return { height: out, biome: bio };
+    }
+
+    // Apply fn(texel, d2) to every texel of this chunk within radius r of
+    // (cx, cy) in world units.
+    function _stampDisc(out, ox, oy, cx, cy, r, fn) {
+        var x0 = Math.max(0, Math.floor(cx - r - ox)), x1 = Math.min(CHUNK - 1, Math.ceil(cx + r - ox));
+        var y0 = Math.max(0, Math.floor(cy - r - oy)), y1 = Math.min(CHUNK - 1, Math.ceil(cy + r - oy));
+        var r2 = r * r;
+        for (var y = y0; y <= y1; y++) {
+            var dy = oy + y - cy;
+            for (var x = x0; x <= x1; x++) {
+                var dx = ox + x - cx, d2 = dx * dx + dy * dy;
+                if (d2 <= r2) out[y * CHUNK + x] = fn(out[y * CHUNK + x], d2);
+            }
+        }
     }
 
     function _slotOf(cx, cy) { return ((cy & MASK) * DIM) + (cx & MASK); }
@@ -389,7 +418,8 @@ var ChunkTerrain = (function () {
         // Low 16 bits: height. For water texels that is the surface and for
         // tree trunks the trunk top; the ground -- what heightAt means -- is
         // that minus the row (depth / trunk height). Materials 3, 4, 5.
-        return (ci >> 8) >= 3 ? (v & 0xFFFF) - (ci & 255) : (v & 0xFFFF);
+        var mt = ci >> 8;
+        return (mt >= 3 && mt <= 5) ? (v & 0xFFFF) - (ci & 255) : (v & 0xFFFF);
     }
 
     // Walkable-or-floatable top: the water surface over water, else the
@@ -406,7 +436,7 @@ var ChunkTerrain = (function () {
         var v = ch[(fy - cy * CHUNK) * CHUNK + (fx - cx * CHUNK)], m = (v >>> 16) >> 8;
         // Water: the surface. Trunks: the ground under them (vehicles are
         // blocked by the trunk, they do not ride up it).
-        return m >= 4 ? (v & 0xFFFF) - ((v >>> 16) & 255) : (v & 0xFFFF);
+        return (m === 4 || m === 5) ? (v & 0xFFFF) - ((v >>> 16) & 255) : (v & 0xFFFF);
     }
 
     // Deliberately UNLIT (raw _colorLUTs, not litLUT()) -- callers that want

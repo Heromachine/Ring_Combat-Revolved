@@ -697,7 +697,36 @@ var WorldGen = (function () {
         _hm = { len: w, wid: hgt, h: u, landTop: landTop, wallTop: wallTop,
                 quant: _makeQuant(wallTop) };
     }
-    function clearHeightmap() { _hmSrc = null; _hm = null; }
+    function clearHeightmap() { _hmSrc = null; _hm = null; _clim = null; }
+    function heightmapMeta() { return _hmSrc ? _hmSrc.meta : null; }
+
+    // Climate that came with the strip (strip_export.py): temperature (C,
+    // elevation-adjusted) and annual precipitation (mm) on a grid every
+    // meta.climate.step pixels, same wrap as the elevation. Used by tree
+    // placement (terrainTrees.js).
+    var _clim = null;
+    function useClimate(meta, data) {
+        var c = meta.climate;
+        if (!c || data.length !== 2 * c.width * c.length) { _clim = null; return false; }
+        _clim = { w: c.width, len: c.length, data: data };
+        return true;
+    }
+    function climateAtWorld(x, y) {
+        if (!_clim) return null;
+        var c = _clim, yy = ((y % _L) + _L) % _L;
+        var fr = (x + cfg.bandHalfWidth) / (2 * cfg.bandHalfWidth) * (c.w - 1);
+        if (fr < 0) fr = 0; else if (fr > c.w - 1) fr = c.w - 1;
+        var fc = yy / _L * c.len;
+        var r0 = fr | 0, c0 = (fc | 0) % c.len, tr = fr - (fr | 0), tc = fc - (fc | 0);
+        var r1 = r0 + 1 < c.w ? r0 + 1 : r0, c1 = (c0 + 1) % c.len, n = c.w * c.len, d = c.data;
+        function at(off) {
+            var a = d[off + r0 * c.len + c0], b = d[off + r0 * c.len + c1];
+            var e = d[off + r1 * c.len + c0], f = d[off + r1 * c.len + c1];
+            var top = a + (b - a) * tc;
+            return top + ((e + (f - e) * tc) - top) * tr;
+        }
+        return { temp: at(0) / 100, precip: at(n) };
+    }
     function usingHeightmap() { return !!_hmSrc; }
 
     function _hmAt(r, c) {
@@ -851,6 +880,11 @@ var WorldGen = (function () {
 
         // Baked heightmap: anything below sea level is water, coloured by depth.
         if (mat === MAT_WATER) return waterColor(h);            // h is the depth row here
+        if (mat === 6) {                                        // forest floor under a canopy: darker, greener
+            var fc0 = colorForHeightBiome(h, bidx, 0);
+            var fr0 = fc0 & 255, fg0 = (fc0 >> 8) & 255, fb0 = (fc0 >> 16) & 255;
+            return (0xFF000000 | ((fb0 * 0.62) << 16) | ((fg0 * 0.72) << 8) | (fr0 * 0.60)) >>> 0;
+        }
         if (mat === 4 || mat === 5) {                           // tree trunk core / edge (terrainTrees.js)
             var tv = ((h * 7919) % 7) - 3, tk = mat === 5 ? 0.72 : 1;
             return (0xFF000000 | (((34 + tv) * tk) << 16) | (((52 + tv) * tk) << 8) | ((78 + tv) * tk)) >>> 0;
@@ -903,6 +937,9 @@ var WorldGen = (function () {
         biomeCount:          biomeCount,
         biomeName:           biomeName,
         useHeightmap:        useHeightmap,
+        heightmapMeta:       heightmapMeta,
+        useClimate:          useClimate,
+        climateAtWorld:      climateAtWorld,
         metresAtWorld:       metresAtWorld,
         materialForMetres:   materialForMetres,
         materialAtWorld:     materialAtWorld,

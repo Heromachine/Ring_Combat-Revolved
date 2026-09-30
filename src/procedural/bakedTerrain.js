@@ -48,6 +48,15 @@ var BakedTerrain = (function () {
                 if (elev.length !== meta.length * meta.width) throw new Error('size mismatch');
                 WorldGen.useHeightmap(meta, elev);
                 _state = 'ready';
+                // Climate (tree placement) is optional: without it forests
+                // fall back to elevation/slope/noise only.
+                if (meta.climate && meta.climate.file) {
+                    fetch(BASE + meta.climate.file).then(function (r) { return r.ok ? r.arrayBuffer() : null; })
+                        .then(function (cb) {
+                            if (cb && WorldGen.useClimate(meta, new Int16Array(cb)) &&
+                                typeof _loopActive !== 'undefined' && _loopActive) refreshWorld();
+                        }).catch(function () { /* keep going without climate */ });
+                }
                 console.log('Baked terrain:', meta.generator, meta.length + 'x' + meta.width,
                     'land ' + Math.round(meta.stats.landFraction * 100) + '%');
                 if (typeof _loopActive !== 'undefined' && _loopActive) refreshWorld();

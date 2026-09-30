@@ -216,7 +216,8 @@ function Draw(timestamp){
                 });
         }
         var npcSprites = (typeof NodeWarNpcSprites === 'function') ? NodeWarNpcSprites() : [];
-        RenderItems(playerSprites.concat(enemySprites).concat(npcSprites));
+        var canopySprites = (typeof TerrainTrees !== 'undefined') ? TerrainTrees.visibleCanopies() : [];
+        RenderItems(playerSprites.concat(enemySprites).concat(npcSprites).concat(canopySprites));
         if (typeof RenderFlashlight === 'function') RenderFlashlight();
         Flip();
         RenderTestTarget();

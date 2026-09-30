@@ -194,6 +194,8 @@ function buildRingNoiseLOD() {
             var hcol = WorldGen.colorHeightAt ? WorldGen.colorHeightAt(h, wx, wy) : h;
             col[o] = WorldGen.colorForHeightBiome(hcol, bio,
                 WorldGen.materialAtWorld ? WorldGen.materialAtWorld(wx, wy) : 0);
+            // Forests read as darker green from afar (terrainTrees.js).
+            if (typeof TerrainTrees !== 'undefined' && h >= WorldGen.config.seaLevel) col[o] = TerrainTrees.tintForest(col[o], wx, wy);
         }
     }
     ringMip = { procedural: true, around: A, across: C, dy: dy, dx: dx,
