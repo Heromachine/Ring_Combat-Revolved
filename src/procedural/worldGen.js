@@ -403,14 +403,32 @@ var WorldGen = (function () {
     // strip's 99th-percentile land elevation maps to landTop through the land
     // curve (hmKnee), local relief is then exaggerated (hmDetail), and the 5th
     // percentile sea depth maps to seaDepth below sea level.
+    // Upper (rock) bands follow VoxelMaster-Minimal's mountainColor
+    // (src/procedural/biomeGen.js): dark brown rock, brown-grey, grey,
+    // light grey. Snow is a material, not a band -- see MAT_SNOW.
     var HM_COLORS = [
         { t: 0.10, r: 118, g: 150, b: 74  },
         { t: 0.28, r: 84,  g: 124, b: 56  },
         { t: 0.46, r: 102, g: 112, b: 70  },
-        { t: 0.64, r: 122, g: 112, b: 94  },
-        { t: 0.82, r: 142, g: 138, b: 132 },
-        { t: 1.00, r: 166, g: 162, b: 156 }
+        { t: 0.58, r: 92,  g: 80,  b: 58  },
+        { t: 0.70, r: 120, g: 110, b: 90  },
+        { t: 0.84, r: 122, g: 120, b: 124 },
+        { t: 1.00, r: 170, g: 170, b: 178 }
     ];
+    // ---- Rock speckle (after VoxelMaster-Minimal's ridge tiles) ----
+    // Colour, not geometry: on rocky ground each texel takes its colour from
+    // its height PLUS a three-octave noise offset, so neighbouring texels
+    // cross the rock bands in mottled patches instead of clean height
+    // stripes. VoxelMaster uses +-42 on a 0-255 scale; hmSpeckle is the same
+    // idea as a fraction of the land range. It fades in by REAL elevation,
+    // speckleFromM to speckleFullM (the rock bands start at ~925 m on the
+    // unboosted curve) -- not by game height, which hmDetail inflates: keyed
+    // on game height it put rock patches on boosted 300 m hills. The snow
+    // edge uses the same field, so snow breaks up over the light rock.
+    // ?speckle=N overrides (0 = off).
+    cfg.hmSpeckle = 0.16;
+    cfg.speckleFromM = 900;
+    cfg.speckleFullM = 1400;
     var _hm = null;
 
     // ---- Materials ----
@@ -467,10 +485,12 @@ var WorldGen = (function () {
         return q ? q.table : null;
     }
     cfg.snowlineM = 2800;
-    cfg.snowEdgeM = 150;   // +- ragged-edge dither around the snowline
+    cfg.snowEdgeM = 200;   // +- patchy edge around the snowline (speckle field)
     try {
         var _qs = parseFloat(new URLSearchParams(location.search).get('snowline'));
         if (_qs > 0) cfg.snowlineM = _qs;
+        var _qp = new URLSearchParams(location.search).get('speckle');
+        if (_qp !== null && parseFloat(_qp) >= 0) cfg.hmSpeckle = parseFloat(_qp);
     } catch (e) { /* headless */ }
 
     // Land curve: log(1 + m/knee), scaled so the strip's P99 lands on
@@ -684,11 +704,43 @@ var WorldGen = (function () {
         var top = a + (b - a) * tx;
         return top + ((c + (d - c) * tx) - top) * ty;
     }
+    // Speckle field: three octaves of value noise at 56 / 28 / 14 WU (the
+    // scale of VoxelMaster's 18-cycles-per-tile fbm), stretched for contrast
+    // and clamped to [-1, 1].
+    function speckleAt(x, y) {
+        var n = (_valueNoise(x, y, 56) * 0.57 + _valueNoise(x, y, 28) * 0.29 + _valueNoise(x, y, 14) * 0.14) * 3.2;
+        return n < -1 ? -1 : (n > 1 ? 1 : n);
+    }
     function _edgeHash(x, y) {
-        // Stretched for contrast, then clamped to [-0.5, 0.5] -- chunkTerrain's
-        // early-outs assume the edge never reaches past snowline +- snowEdgeM.
-        var n = (_valueNoise(x, y, 48) * 0.7 + _valueNoise(x, y, 12) * 0.3) * 1.6;
-        return n < -0.5 ? -0.5 : (n > 0.5 ? 0.5 : n);
+        // Clamped to [-0.5, 0.5] -- chunkTerrain's early-outs assume the
+        // edge never reaches past snowline +- snowEdgeM.
+        return speckleAt(x, y) * 0.5;
+    }
+
+    // Speckle parameters for the current heightmap, or null when there is
+    // none or it is switched off. loM/fullM: real elevation (metres) where it
+    // fades in; amp: max colour-height offset (height units); floor: lowest
+    // colour height it may pull to (stays clear of beach and water colours).
+    function speckleParams() {
+        if (!_hmSrc || !(cfg.hmSpeckle > 0)) return null;
+        var top = _hmSrc.opts.landTop || cfg.hmTop, s = cfg.seaLevel;
+        return { loM: cfg.speckleFromM, fullM: cfg.speckleFullM,
+                 amp: cfg.hmSpeckle * (top - s), floor: s + 6 };
+    }
+    // Speckle weight 0..1 from real elevation.
+    function speckleWeight(sp, m) {
+        if (m === null || m <= sp.loM) return 0;
+        return m >= sp.fullM ? 1 : (m - sp.loM) / (sp.fullM - sp.loM);
+    }
+    // Height to pick a COLOUR by at a position: the real height, offset by
+    // speckle on rocky ground. Geometry never uses this.
+    function colorHeightAt(h, x, y) {
+        var sp = speckleParams();
+        if (!sp) return h;
+        var w = speckleWeight(sp, metresAtWorld(x, y));
+        if (!w) return h;
+        var hc = h + speckleAt(x, y) * sp.amp * w;
+        return hc < sp.floor ? sp.floor : hc;
     }
 
     // Material from real elevation in metres (see MAT_SNOW). Callers that
@@ -701,6 +753,13 @@ var WorldGen = (function () {
         if (_hmSrc && cfg.edgeWall && (x > wallMaterialX() || -x > wallMaterialX())) return MAT_WALL;
         if (m === null || m <= 0) return 0;
         return (m + _edgeHash(x, y) * 2 * cfg.snowEdgeM > cfg.snowlineM) ? MAT_SNOW : 0;
+    }
+    // Same test with the speckle value already known (chunk generation
+    // interpolates it from a coarse grid instead of evaluating per texel).
+    function snowForMetres(m, spv) {
+        if (m === null || m <= 0) return 0;
+        var e = spv * 0.5; e = e < -0.5 ? -0.5 : (e > 0.5 ? 0.5 : e);
+        return (m + e * 2 * cfg.snowEdgeM > cfg.snowlineM) ? MAT_SNOW : 0;
     }
     function materialAtWorld(x, y) {
         return _hmSrc ? materialForMetres(metresAtWorld(x, y), x, y) : 0;
@@ -764,6 +823,10 @@ var WorldGen = (function () {
         materialForMetres:   materialForMetres,
         materialAtWorld:     materialAtWorld,
         colorIndex:          colorIndex,
+        speckleAt:           speckleAt,
+        snowForMetres:       snowForMetres,
+        speckleParams:       speckleParams,
+        colorHeightAt:       colorHeightAt,
         colorRowTable:       colorRowTable,
         heightForColorRow:   heightForColorRow,
         wallMaterialX:       wallMaterialX,

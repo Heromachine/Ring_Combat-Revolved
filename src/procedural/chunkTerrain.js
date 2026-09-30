@@ -124,6 +124,7 @@ var ChunkTerrain = (function () {
         // baked heightmap has it; without one every texel is material 0.
         var hmOn = !!(WorldGen.usingHeightmap && WorldGen.usingHeightmap());
         var mlat = hmOn ? new Float32Array(N * N) : null;
+        var mlatAll = mlat;   // kept for the rock speckle after the snow early-out
         for (var j = 0; j < N; j++) {
             var wy = oy + j * NOISE_STEP;
             for (var i = 0; i < N; i++) {
@@ -151,6 +152,27 @@ var ChunkTerrain = (function () {
         var rowTbl = WorldGen.colorRowTable ? WorldGen.colorRowTable() : null;
         var rowTop = rowTbl ? rowTbl.length - 1 : 255;
         var wallX = (hmOn && WorldGen.config.edgeWall) ? WorldGen.wallMaterialX() : Infinity;
+        // Rock speckle (WorldGen.colorHeightAt, after VoxelMaster-Minimal):
+        // colour-only, and only on rocky ground, so skip it for the whole
+        // chunk when no lattice point reaches the rock bands.
+        var spk = (hmOn && WorldGen.speckleParams) ? WorldGen.speckleParams() : null;
+        if (spk) {
+            var mAllMax = -Infinity;
+            for (var q2 = 0; q2 < mlatAll.length; q2++) if (mlatAll[q2] > mAllMax) mAllMax = mlatAll[q2];
+            if (mAllMax <= spk.loM) spk = null;   // no rocky real ground in this chunk
+        }
+        // One colour row, in height units, for the per-texel jitter.
+        var rowUnits = rowTbl ? (rowTbl.length - 1 - 64) / (255 - 64) : 1;
+        // The speckle field (rock colour and the snow edge) is smooth below
+        // 14 WU, so it is evaluated on a 4 WU grid and interpolated per
+        // texel -- 1/16 of the noise calls of doing it per texel.
+        var SG = 4, SGN = CHUNK / SG + 1, sg = null;
+        if (spk || mlat) {
+            sg = new Float32Array(SGN * SGN);
+            for (var gj = 0; gj < SGN; gj++) {
+                for (var gi = 0; gi < SGN; gi++) sg[gj * SGN + gi] = WorldGen.speckleAt(ox + gi * SG, oy + gj * SG);
+            }
+        }
         var inv = 1 / NOISE_STEP;
 
         // Buildings (src/indoor/buildingPlacer.js) are sited by WorldGen
@@ -203,7 +225,14 @@ var ChunkTerrain = (function () {
                     }
                 }
                 var hv = h < 0 ? 0 : (h > 65535 ? 65535 : h) | 0;
-                var mat = 0, wx3 = ox + x;
+                var mat = 0, wx3 = ox + x, spv = 0;
+                if (sg) {
+                    var sgx = x >> 2, sgy = y >> 2, sfx = (x & 3) * 0.25, sfy = (y & 3) * 0.25;
+                    var s00 = sg[sgy * SGN + sgx], s10 = sg[sgy * SGN + sgx + 1];
+                    var s01 = sg[(sgy + 1) * SGN + sgx], s11 = sg[(sgy + 1) * SGN + sgx + 1];
+                    var s0 = s00 + (s10 - s00) * sfx;
+                    spv = s0 + ((s01 + (s11 - s01) * sfx) - s0) * sfy;
+                }
                 if (wx3 > wallX || -wx3 > wallX) mat = 2;   // worldGen.js MAT_WALL
                 else if (snowAll) mat = 1;                   // MAT_SNOW
                 else if (mlat) {
@@ -214,10 +243,24 @@ var ChunkTerrain = (function () {
                     else if (ma > snowLo || mb > snowLo || mc > snowLo || md > snowLo) {
                         var mt = ma + (mc - ma) * tx;
                         var m = mt + ((mb + (md - mb) * tx) - mt) * ty;
-                        mat = WorldGen.materialForMetres(m, wx3, wy2);
+                        mat = WorldGen.snowForMetres(m, spv);
                     }
                 }
-                var hr = hv > rowTop ? rowTop : hv;
+                var hc = hv;
+                if (spk && mat === 0) {
+                    var am = mlatAll[r0 + i0], bm = mlatAll[r0 + i1];
+                    var mtop = am + (bm - am) * tx;
+                    var mr = mtop + ((mlatAll[r1 + i0] + (mlatAll[r1 + i1] - mlatAll[r1 + i0]) * tx) - mtop) * ty;
+                    if (mr > spk.loM) {
+                        // speckle plus a +-1 colour-row jitter per texel (the
+                        // equivalent of VoxelMaster's per-pixel variation)
+                        var sw8 = mr >= spk.fullM ? 1 : (mr - spk.loM) / (spk.fullM - spk.loM);
+                        hc = hv + (spv * spk.amp + _detail(wx3 + 7919, wy2) * 2 * rowUnits) * sw8;
+                        if (hc < spk.floor) hc = spk.floor;
+                        hc = hc | 0;
+                    }
+                }
+                var hr = hc > rowTop ? rowTop : hc;
                 var crow = rowTbl ? rowTbl[hr] : hr;
                 out[rowBase + x] = (hv | (((mat << 8) | crow) << 16)) >>> 0;
             }

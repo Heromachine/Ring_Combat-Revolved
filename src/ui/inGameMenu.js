@@ -325,7 +325,7 @@ var InGameMenu = (function () {
                                ? WorldGen.heightAtWorld(wx, wy, 0.5)
                                : Terrain.heightAt(wx, wy);
                         var c  = (typeof WorldGen !== 'undefined')
-                               ? WorldGen.colorForHeightBiome(h, gBio, WorldGen.materialAtWorld(wx, wy))
+                               ? WorldGen.colorForHeightBiome(WorldGen.colorHeightAt(h, wx, wy), gBio, WorldGen.materialAtWorld(wx, wy))
                                : Terrain.colorAt(wx, wy);
                         var r = c & 0xFF, g = (c >> 8) & 0xFF, b = (c >> 16) & 0xFF;
                         for (var by = 0; by < STEP; by++) {
