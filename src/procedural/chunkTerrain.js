@@ -62,8 +62,9 @@ var ChunkTerrain = (function () {
     // wall -- and the render loop indexes it with (texel >>> 16), still one
     // read. Height alone is (texel & 0xFFFF).
     // Material 3 (water, baked heightmap only) is indexed by depth, not
-    // height: its row is units below the surface.
-    var LUT_SIZE = 1024;
+    // height: its row is units below the surface. Materials 4/5 are tree
+    // trunk core/edge (terrainTrees.js): row = trunk height above ground.
+    var LUT_SIZE = 1536;
     function _buildColorLUTs() {
         var n = WorldGen.biomeCount();
         _colorLUTs = [];
@@ -157,6 +158,8 @@ var ChunkTerrain = (function () {
         var rowTbl = WorldGen.colorRowTable ? WorldGen.colorRowTable() : null;
         var rowTop = rowTbl ? rowTbl.length - 1 : 255;
         var wallX = (hmOn && WorldGen.config.edgeWall) ? WorldGen.wallMaterialX() : Infinity;
+        // Tree trunks overlapping this chunk (terrainTrees.js), tops resolved.
+        var trunks = (typeof TerrainTrees !== 'undefined') ? TerrainTrees.touching(ox, oy, CHUNK) : null;
         // Rock speckle (WorldGen.colorHeightAt, after VoxelMaster-Minimal):
         // colour-only, and only on rocky ground, so skip it for the whole
         // chunk when no lattice point reaches the rock bands.
@@ -280,7 +283,21 @@ var ChunkTerrain = (function () {
                 }
                 var hr = hc > rowTop ? rowTop : hc;
                 var crow = rowTbl ? rowTbl[hr] : hr;
-                out[rowBase + x] = (hv | (((mat << 8) | crow) << 16)) >>> 0;
+                var texel = (hv | (((mat << 8) | crow) << 16)) >>> 0;
+                if (trunks) {
+                    // Trunk: store its flat TOP for drawing and its height
+                    // above this texel's ground in the row (heightAt subtracts
+                    // it), core vs darker edge ring as two materials.
+                    for (var tk = 0; tk < trunks.length; tk++) {
+                        var tr = trunks[tk], tdx = wx3 - tr.x, tdy = wy2 - tr.y, td2 = tdx * tdx + tdy * tdy;
+                        if (td2 > tr.r * tr.r) continue;
+                        var trow = tr.top - hv; if (trow < 0) trow = 0; else if (trow > 255) trow = 255;
+                        var tmat = td2 > (tr.r - 1) * (tr.r - 1) ? 5 : 4;
+                        texel = ((hv + trow) | (((tmat << 8) | trow) << 16)) >>> 0;
+                        break;
+                    }
+                }
+                out[rowBase + x] = texel;
             }
         }
 
@@ -369,9 +386,10 @@ var ChunkTerrain = (function () {
         }
         var lx = fx - cx * CHUNK, ly = fy - cy * CHUNK;
         var v = ch[ly * CHUNK + lx], ci = v >>> 16;
-        // Low 16 bits: height. For water texels that is the surface; the
-        // floor -- what heightAt means -- is surface minus the depth row.
-        return (ci >> 8) === 3 ? (v & 0xFFFF) - (ci & 255) : (v & 0xFFFF);
+        // Low 16 bits: height. For water texels that is the surface and for
+        // tree trunks the trunk top; the ground -- what heightAt means -- is
+        // that minus the row (depth / trunk height). Materials 3, 4, 5.
+        return (ci >> 8) >= 3 ? (v & 0xFFFF) - (ci & 255) : (v & 0xFFFF);
     }
 
     // Walkable-or-floatable top: the water surface over water, else the
@@ -385,7 +403,10 @@ var ChunkTerrain = (function () {
             if (WorldGen.usingHeightmap && WorldGen.usingHeightmap() && h < WorldGen.config.seaLevel) h = WorldGen.config.seaLevel;
             return h;
         }
-        return ch[(fy - cy * CHUNK) * CHUNK + (fx - cx * CHUNK)] & 0xFFFF;
+        var v = ch[(fy - cy * CHUNK) * CHUNK + (fx - cx * CHUNK)], m = (v >>> 16) >> 8;
+        // Water: the surface. Trunks: the ground under them (vehicles are
+        // blocked by the trunk, they do not ride up it).
+        return m >= 4 ? (v & 0xFFFF) - ((v >>> 16) & 255) : (v & 0xFFFF);
     }
 
     // Deliberately UNLIT (raw _colorLUTs, not litLUT()) -- callers that want

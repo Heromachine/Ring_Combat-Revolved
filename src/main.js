@@ -267,6 +267,8 @@ function Init(){
     // building's footprint at GENERATION time, so a chunk generated before
     // its building was placed would never get flattened for it.
     if (typeof placeBuildings === 'function') placeBuildings();
+    // Tree canopies sit on the trunk tops, which depend on the configured world.
+    if (typeof TerrainTrees !== 'undefined') TerrainTrees.refresh();
     if (typeof Terrain !== 'undefined' && Terrain.usingChunks && Terrain.usingChunks()) {
         ChunkTerrain.reset();
         ChunkTerrain.requestAround(camera.x, camera.y, camera.distance);

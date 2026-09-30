@@ -181,6 +181,7 @@ var canMoveTo=(nx,ny)=>{
     var playerZ = camera.height;
     if (collidesWithCube(nx, ny, playerZ)) return false;
     if (typeof getBuildingCollision === 'function' && getBuildingCollision(nx, ny)) return false;
+    if (typeof TerrainTrees !== 'undefined' && TerrainTrees.collides(nx, ny, 5)) return false;
 
     // Original slope checking (only when on ground)
     if(!isOnGround())return true;

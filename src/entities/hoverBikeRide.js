@@ -48,6 +48,7 @@ var HoverBikeRide = (function () {
             typeof WorldGen !== 'undefined' && WorldGen.config.edgeWall) {
             if (Math.abs(x) > WorldGen.config.bandHalfWidth - WorldGen.config.wallRamp - BIKE_RADIUS) return true;
         }
+        if (typeof TerrainTrees !== 'undefined' && TerrainTrees.collides(x, y, BIKE_RADIUS)) return true;
         return false;
     }
 

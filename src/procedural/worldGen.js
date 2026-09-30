@@ -851,6 +851,10 @@ var WorldGen = (function () {
 
         // Baked heightmap: anything below sea level is water, coloured by depth.
         if (mat === MAT_WATER) return waterColor(h);            // h is the depth row here
+        if (mat === 4 || mat === 5) {                           // tree trunk core / edge (terrainTrees.js)
+            var tv = ((h * 7919) % 7) - 3, tk = mat === 5 ? 0.72 : 1;
+            return (0xFF000000 | (((34 + tv) * tk) << 16) | (((52 + tv) * tk) << 8) | ((78 + tv) * tk)) >>> 0;
+        }
         if (_hmSrc && h < s && mat !== MAT_WALL) return waterColor(s - h);
 
         if (cfg.edgeWall && (_hmSrc ? mat === MAT_WALL : h >= cfg.wallColorFrom)) {

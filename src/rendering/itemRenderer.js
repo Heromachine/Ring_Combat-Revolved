@@ -104,6 +104,11 @@ function RenderItems(extraItems){
             scaleY *= 2.6;
             scaleX *= 2.6 * (sw / 2) / focal;
         }
+        if (it.type === "canopy") {
+            // Tree canopy billboard (terrainTrees.js): sized in world units.
+            scaleX = it.w * (sw / 2) / groundForward;
+            scaleY = it.h * focal / groundForward;
+        }
         if (it.type === "bullet") {
             scaleX *= bulletSize;
             scaleY *= bulletSize;
@@ -151,6 +156,9 @@ function RenderItems(extraItems){
             srcOffY   = 0;
         }
 
+        // Canopies sit slightly in front of their own trunk (see terrainTrees.js).
+        var _bias = it.depthBias || 0;
+
         // Destination size and position using actual scale
         var destW = Math.max(1, Math.ceil(scaleX));
         var destH = Math.max(1, Math.ceil(scaleY));
@@ -176,7 +184,7 @@ function RenderItems(extraItems){
                 var bufIdx = sy * sw + sx;
 
                 // Depth test - only draw if in front of terrain
-                if (groundForward >= depth[bufIdx]) continue;
+                if (groundForward - _bias >= depth[bufIdx]) continue;
 
                 // Map destination X to source X (within frame region)
                 var sampX = Math.floor(px * srcW / destW) + srcOffX;
@@ -205,7 +213,7 @@ function RenderItems(extraItems){
                 // the terrain pass left at that pixel, or Infinity (sky) for
                 // any part of a tall sprite reaching above the terrain
                 // silhouette -- exactly where a tree's canopy usually is.
-                depth[bufIdx] = groundForward;
+                depth[bufIdx] = groundForward - _bias;
             }
         }
     });

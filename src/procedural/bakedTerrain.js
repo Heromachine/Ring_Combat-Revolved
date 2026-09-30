@@ -62,6 +62,7 @@ var BakedTerrain = (function () {
         if (typeof ringWorld !== 'undefined' && ringWorld.enabled && ringWorld.procedural &&
             typeof buildRingNoiseLOD === 'function') buildRingNoiseLOD();
         if (typeof placeBuildings === 'function') placeBuildings();
+        if (typeof TerrainTrees !== 'undefined') TerrainTrees.refresh();
         if (typeof Terrain !== 'undefined' && Terrain.usingChunks && Terrain.usingChunks()) {
             ChunkTerrain.reset();
             ChunkTerrain.requestAround(camera.x, camera.y, camera.distance);
