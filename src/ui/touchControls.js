@@ -109,8 +109,8 @@ function DrawTouchControls(ctx) {
         input.aimToggled ? 'rgba(200,155,30,0.65)' : 'rgba(120,100,30,0.45)',
         input.aimToggled ? 'rgba(255,220,80,0.9)'  : 'rgba(180,150,40,0.6)');
 
-    // SWAP (purple)
-    drawButton(touchControls.swapButton, 'SWAP',
+    // SWAP (purple) -- portrait only; landscape taps the weapon squares
+    if (!isTouchLandscape()) drawButton(touchControls.swapButton, 'SWAP',
         'rgba(160,80,255,0.85)', 'rgba(100,50,200,0.5)', 'rgba(180,110,255,0.8)');
 
     ctx.restore();

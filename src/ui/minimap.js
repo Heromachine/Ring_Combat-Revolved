@@ -11,7 +11,8 @@ function DrawMinimap() {
     }
 
     var ctx     = screendata.context;
-    var mmScale = uiScale.minimap;
+    // Phones in landscape have little height to spare: 60% size there.
+    var mmScale = uiScale.minimap * (typeof isTouchLandscape === 'function' && isTouchLandscape() ? 0.6 : 1);
     var S       = Math.floor(150 * mmScale);   // diameter in canvas pixels
     var margin  = Math.floor(20  * mmScale);   // extra margin gives the N badge room to breathe
     var sw      = screendata.canvas.width;

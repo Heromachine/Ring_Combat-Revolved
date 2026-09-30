@@ -422,6 +422,21 @@
             pointer-events: auto;
             border-radius: 2px;
         }
+        .touch-square {
+            position: fixed;
+            z-index: 200;
+            font-weight: bold;
+            letter-spacing: 1px;
+            color: rgba(138,176,200,0.6);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #touch-action-btn {
+            color: #42e8ff;
+            border-color: rgba(66,232,255,0.7);
+            background: rgba(66,232,255,0.12);
+            animation: prompt-pulse 1.8s ease-in-out infinite;
+        }
         .ws-letter {
             font-size: 22px;
             font-weight: bold;
@@ -1033,6 +1048,10 @@
 
 <!-- ── Weapon slots (DOM — crisp at any resolution) ── -->
 <div id="weapon-slots-ui"></div>
+<!-- Touch (landscape): flashlight left of the weapon slots, ACTION right of
+     them while something can be activated. Placed by weaponUI.js. -->
+<div id="touch-flash-btn" class="ws-slot touch-square" style="display:none;">LIGHT</div>
+<div id="touch-action-btn" class="ws-slot touch-square" style="display:none;"></div>
 <!-- Node War: Key indicator. Simple placeholder for now -- a weapon-slot
      styled rectangle, shown only while the local player is carrying the
      Key. Whether the Key should replace a weapon slot outright (Halo CTF
@@ -1594,7 +1613,7 @@
 <script src="src/indoor/buildingPlacer.js?v=2"></script>
 <script src="src/entities/nodeWarObjects.js?v=3"></script>
 <script src="src/entities/hoverBike.js?v=7"></script>
-<script src="src/entities/hoverBikeRide.js?v=6"></script>
+<script src="src/entities/hoverBikeRide.js?v=8"></script>
 <script src="src/systems/nodeWarInteract.js?v=5"></script>
 <script src="src/ui/nodeWarHud.js?v=3"></script>
 <script src="quests/TestQuest.js"></script>
@@ -1615,11 +1634,11 @@
 <!-- ===================================== -->
 <!-- src/ files - UI                      -->
 <!-- ===================================== -->
-<script src="src/ui/minimap.js?v=5"></script>
+<script src="src/ui/minimap.js?v=6"></script>
 <script src="src/ui/debugInfo.js"></script>
 <script src="src/ui/scoreboard.js"></script>
-<script src="src/ui/weaponUI.js"></script>
-<script src="src/ui/touchControls.js"></script>
+<script src="src/ui/weaponUI.js?v=2"></script>
+<script src="src/ui/touchControls.js?v=2"></script>
 <script src="src/ui/inGameMenu.js?v=16"></script>
 
 <!-- ===================================== -->
@@ -1628,7 +1647,7 @@
 <script src="src/input/keyboard.js?v=11"></script>
 <script src="src/input/mouse.js?v=4"></script>
 <script src="src/input/gamepad.js?v=5"></script>
-<script src="src/input/touch.js"></script>
+<script src="src/input/touch.js?v=3"></script>
 
 <!-- ===================================== -->
 <!-- src/ files - Map                     -->
@@ -1656,10 +1675,17 @@
     function tryFullscreen() {
         var isTouch = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
         if (!isTouch) return;
+        if (document.fullscreenElement || document.webkitFullscreenElement) return;
         var el = document.documentElement;
-        if (el.requestFullscreen)              el.requestFullscreen().catch(function(){});
+        if (el.requestFullscreen)              el.requestFullscreen({ navigationUI: 'hide' }).catch(function(){});
         else if (el.webkitRequestFullscreen)   el.webkitRequestFullscreen();
     }
+
+    // Browsers only allow fullscreen from a tap, never on a bare page load.
+    // So every tap (splash, menus, in game) re-requests it while the page is
+    // not fullscreen -- the first touch goes fullscreen, and so does the first
+    // touch after the player swipes out of it.
+    document.addEventListener('touchend', tryFullscreen, { passive: true, capture: true });
 
     // Relay fullscreen change → resize so the game canvas re-fits
     document.addEventListener('fullscreenchange',       function () { if (typeof OnResizeWindow === 'function') OnResizeWindow(); });

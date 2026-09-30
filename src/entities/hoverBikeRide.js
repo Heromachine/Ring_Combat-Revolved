@@ -189,10 +189,12 @@ var HoverBikeRide = (function () {
         if (showPrompt) prompt.textContent = mounted ? '[F / A] Dismount' : '[F / A] Ride Hover Bike';
         var crashed = !mounted && hoverBike.destroyed && Date.now() < statusUntil;
         status.style.display = mounted || crashed ? 'block' : 'none';
+        // Touch screens show speed only: the on-screen EXIT square and
+        // sticks explain themselves, and a long line covers the buttons.
         if (mounted) status.textContent = 'HOVER BIKE  ' + Math.round(Math.abs(speed)) + ' / ' + MAX_SPEED +
-            ' WU/s  |  ' + (gamepad.connected
+            ' WU/s' + (touchControls.enabled && !gamepad.connected ? '' : '  |  ' + (gamepad.connected
                 ? 'LEFT STICK DRIVE · RIGHT STICK LOOK · RT FIRE'
-                : 'WASD DRIVE · MOUSE LOOK · CLICK FIRE');
+                : 'WASD DRIVE · MOUSE LOOK · CLICK FIRE'));
         else if (crashed) status.textContent = 'HOVER BIKE DESTROYED — STEEP SLOPE IMPACT';
     }
 

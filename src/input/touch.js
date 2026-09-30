@@ -3,6 +3,29 @@
 // ===============================
 "use strict";
 
+// Landscape phone/tablet layout. Portrait keeps its own layout (and SWAP)
+// until it gets its own pass.
+function isTouchLandscape() {
+    return touchControls.enabled && window.innerWidth >= window.innerHeight;
+}
+
+// A stick only grabs a touch that STARTS on its ring (plus a little slack for
+// thumbs). Once grabbed it follows that finger anywhere until it lifts, so
+// sliding off the ring keeps steering instead of dropping out.
+var STICK_GRAB_SLACK = 1.2;
+function _grabStick(stick, pos, touch) {
+    if (stick.active) return false;
+    var r = touchControls.stickRadius * STICK_GRAB_SLACK;
+    if (Math.hypot(touch.clientX - pos.x, touch.clientY - pos.y) > r) return false;
+    stick.active   = true;
+    stick.touchId  = touch.identifier;
+    stick.startX   = pos.x;
+    stick.startY   = pos.y;
+    stick.currentX = touch.clientX;
+    stick.currentY = touch.clientY;
+    return true;
+}
+
 function enableTouchControls() {
     touchControls.enabled = true;
     updateTouchControlPositions();
@@ -45,10 +68,12 @@ function updateTouchControlPositions() {
         touchControls.leftStickPos  = { x: r + 35, y: sh - r - 80 };
         touchControls.rightStickPos = { x: sw - r - 35, y: sh - r - 30 };  // moved down
 
+        // ADS sits just under the (touch-size) minimap, FIRE under ADS,
+        // both clear of the LOOK ring below.
         touchControls.shootButton.x = sw - 80;
-        touchControls.shootButton.y = sh - 190;  // moved up
+        touchControls.shootButton.y = sh - 175;
         touchControls.zoomButton.x  = sw - 80;
-        touchControls.zoomButton.y  = sh - 270;  // shifted up to stay above fire
+        touchControls.zoomButton.y  = sh - 250;
         touchControls.jumpButton.x  = sw - 190;
         touchControls.jumpButton.y  = sh - 100;
         touchControls.swapButton.x  = r + 35 + 115;
@@ -69,7 +94,6 @@ function handleTouchStart(e) {
         var touch = e.changedTouches[i];
         var x = touch.clientX;
         var y = touch.clientY;
-        var sw = window.innerWidth;
 
         // Weapon slot touches
         for (var j = 0; j < touchControls.weaponSlots.length; j++) {
@@ -117,35 +141,18 @@ function handleTouchStart(e) {
             continue;
         }
 
-        // SWAP WEAPON
+        // SWAP WEAPON (portrait only -- landscape taps the weapon squares)
         var wb = touchControls.swapButton;
-        if (Math.hypot(x - wb.x, y - wb.y) < wb.radius) {
+        if (!isTouchLandscape() && Math.hypot(x - wb.x, y - wb.y) < wb.radius) {
             wb.active = true; wb.touchId = touch.identifier;
             input.swapWeapon = true;
             continue;
         }
 
-        // Left half = MOVE stick, right half = LOOK stick
-        // Both use FIXED centers — stick ring stays in place
-        if (x < sw / 2) {
-            if (!touchControls.leftStick.active) {
-                touchControls.leftStick.active   = true;
-                touchControls.leftStick.touchId  = touch.identifier;
-                touchControls.leftStick.startX   = touchControls.leftStickPos.x;
-                touchControls.leftStick.startY   = touchControls.leftStickPos.y;
-                touchControls.leftStick.currentX = x;
-                touchControls.leftStick.currentY = y;
-            }
-        } else {
-            if (!touchControls.rightStick.active) {
-                touchControls.rightStick.active   = true;
-                touchControls.rightStick.touchId  = touch.identifier;
-                touchControls.rightStick.startX   = touchControls.rightStickPos.x;
-                touchControls.rightStick.startY   = touchControls.rightStickPos.y;
-                touchControls.rightStick.currentX = x;
-                touchControls.rightStick.currentY = y;
-            }
-        }
+        // MOVE / LOOK sticks: fixed rings, grabbed only by a touch that
+        // starts on the ring.
+        if (_grabStick(touchControls.leftStick, touchControls.leftStickPos, touch)) continue;
+        _grabStick(touchControls.rightStick, touchControls.rightStickPos, touch);
     }
 }
 
