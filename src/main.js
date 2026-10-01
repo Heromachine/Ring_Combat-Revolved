@@ -288,6 +288,7 @@ function Init(){
     LoadMap("C21;D21");
     OnResizeWindow();
     loadGunModel();
+    loadWeaponModels();
     loadCubeTexture();
     initGreenCube();
     initShadowCube();

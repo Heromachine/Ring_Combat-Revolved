@@ -72,6 +72,199 @@ function loadGunModel() {
     gunModel.texture.src = '3D_models/Gun _obj/Gun.png';
 }
 
+// ===============================
+// Per-weapon viewmodels
+// ===============================
+// Weapons listed here draw their own OBJ model instead of the placeholder
+// Gun.obj (every other weapon keeps the placeholder). These models are
+// flat-coloured from their .mtl (Kd, or Ke for glowing parts) rather than
+// textured, and they are far denser than the placeholder (the raygun is
+// ~9k triangles vs 237), so each one is drawn into an offscreen canvas and
+// only redrawn when its rotation or size changes -- that is, during the
+// hip <-> ADS transition. Otherwise a frame is one drawImage.
+//
+// +Y is up. The placeholder's muzzle points along -X; `flip` turns a model
+// whose muzzle points along +X (Blender exports from Codex-and-Blender3D
+// do) 180 degrees about Y to match. `scale` and `anchor` place the model
+// where the placeholder sits in the hand: the model's vertex centroid is
+// moved to `anchor` (the placeholder's centroid) after scaling.
+var WEAPON_MODELS = {
+    pistol: {
+        obj: '3D_models/raygun_pistol/raygun_pistol_v001.obj',
+        mtl: '3D_models/raygun_pistol/raygun_pistol_v001.mtl',
+        flip: true,
+        scale: 1.4,
+        // y raised from the placeholder's centroid (0.007) so the top of the
+        // rear fin reaches the placeholder's top edge (0.15), which is what
+        // lines the sights up with the crosshair in ADS.
+        anchor: { x: -0.035, y: 0.053 }
+    }
+};
+
+function _srgb(c) {   // .mtl colours are linear
+    return Math.round(255 * Math.pow(Math.max(0, Math.min(1, c)), 1 / 2.2));
+}
+
+function _parseMtl(text) {
+    var mats = {}, cur = null;
+    text.split('\n').forEach(function (line) {
+        var p = line.trim().split(/\s+/);
+        if (p[0] === 'newmtl') { cur = mats[p.slice(1).join(' ')] = { kd: [0.8, 0.8, 0.8], ke: [0, 0, 0], ns: 0 }; }
+        else if (!cur) return;
+        else if (p[0] === 'Kd') cur.kd = [+p[1], +p[2], +p[3]];
+        else if (p[0] === 'Ke') cur.ke = [+p[1], +p[2], +p[3]];
+        else if (p[0] === 'Ns') cur.ns = +p[1];
+    });
+    var out = {};
+    Object.keys(mats).forEach(function (k) {
+        var m = mats[k], glow = m.ke[0] + m.ke[1] + m.ke[2] > 0.05;
+        var c = glow ? m.ke : m.kd;
+        out[k] = { r: _srgb(c[0]), g: _srgb(c[1]), b: _srgb(c[2]), glow: glow, shiny: m.ns > 400 };
+    });
+    return out;
+}
+
+function loadWeaponModel(type) {
+    var def = WEAPON_MODELS[type];
+    Promise.all([
+        fetch(def.obj).then(function (r) { if (!r.ok) throw Error(def.obj + ' ' + r.status); return r.text(); }),
+        fetch(def.mtl).then(function (r) { return r.ok ? r.text() : ''; })
+    ]).then(function (res) {
+        var mats = _parseMtl(res[1]);
+        var plain = { r: 160, g: 160, b: 170, glow: false, shiny: false };
+        var verts = [], tris = [], mat = plain;
+        res[0].split('\n').forEach(function (line) {
+            var p = line.trim().split(/\s+/);
+            if (p[0] === 'v') verts.push(+p[1], +p[2], +p[3]);
+            else if (p[0] === 'usemtl') mat = mats[p.slice(1).join(' ')] || plain;
+            else if (p[0] === 'f') {
+                var idx = [];
+                for (var i = 1; i < p.length; i++) idx.push(parseInt(p[i], 10) - 1);
+                for (var k = 1; k + 1 < idx.length; k++) tris.push({ a: idx[0], b: idx[k], c: idx[k + 1], m: mat });  // fan: any n-gon
+            }
+        });
+        var n = verts.length / 3, cx = 0, cy = 0, cz = 0;
+        for (var i = 0; i < n; i++) { cx += verts[i * 3]; cy += verts[i * 3 + 1]; cz += verts[i * 3 + 2]; }
+        cx /= n; cy /= n; cz /= n;
+        var f = def.flip ? -1 : 1;   // 180 degrees about Y: x and z both negate, winding is kept
+        for (var j = 0; j < n; j++) {
+            verts[j * 3]     = f * (verts[j * 3]     - cx) * def.scale + def.anchor.x;
+            verts[j * 3 + 1] =     (verts[j * 3 + 1] - cy) * def.scale + def.anchor.y;
+            verts[j * 3 + 2] = f * (verts[j * 3 + 2] - cz) * def.scale;
+        }
+        def.verts = new Float32Array(verts);
+        def.tris = tris;
+        def.cache = null;
+        def.loaded = true;
+        console.log('Weapon model loaded:', type, n, 'vertices,', tris.length, 'triangles');
+    }).catch(function (err) { console.error('Failed to load weapon model ' + type + ':', err); });
+}
+
+function loadWeaponModels() {
+    Object.keys(WEAPON_MODELS).forEach(loadWeaponModel);
+}
+
+function _activeWeaponModel() {
+    var slot = playerWeapons[currentWeaponIndex];
+    var def = slot && WEAPON_MODELS[slot.type];
+    return def && def.loaded ? def : null;
+}
+
+// Light from upper left, slightly toward the viewer (+Z faces the viewer).
+var _VM_LIGHT = (function () { var x = -0.45, y = 0.65, z = 0.62, l = Math.hypot(x, y, z); return [x / l, y / l, z / l]; })();
+
+function _renderWeaponModel(def, cosX, sinX, cosY, sinY, cosZ, sinZ, scale) {
+    var V = def.verts, n = V.length / 3;
+    var P = new Float32Array(n * 3);   // rotated: x right, y up, z toward viewer
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (var i = 0; i < n; i++) {
+        var x = V[i * 3], y = V[i * 3 + 1], z = V[i * 3 + 2];
+        var y1 = y * cosX - z * sinX;
+        var z1 = y * sinX + z * cosX;
+        var x2 = x * cosY + z1 * sinY;
+        var z2 = -x * sinY + z1 * cosY;
+        var x3 = x2 * cosZ - y1 * sinZ;
+        var y3 = x2 * sinZ + y1 * cosZ;
+        P[i * 3] = x3; P[i * 3 + 1] = y3; P[i * 3 + 2] = z2;
+        if (x3 < minX) minX = x3; if (x3 > maxX) maxX = x3;
+        if (y3 < minY) minY = y3; if (y3 > maxY) maxY = y3;
+    }
+    var pad = 2;
+    var ox = Math.ceil(-minX * scale) + pad, oy = Math.ceil(maxY * scale) + pad;   // model origin in the canvas
+    var cw = Math.ceil((maxX - minX) * scale) + pad * 2, ch = Math.ceil((maxY - minY) * scale) + pad * 2;
+    var cv = def.cache && def.cache.canvas || document.createElement('canvas');
+    cv.width = Math.max(1, cw); cv.height = Math.max(1, ch);
+    var c = cv.getContext('2d');
+
+    // Front faces only, back to front.
+    var L = _VM_LIGHT, list = [];
+    for (var t = 0; t < def.tris.length; t++) {
+        var tr = def.tris[t], a = tr.a * 3, b = tr.b * 3, d = tr.c * 3;
+        var ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
+        var vx = P[d] - P[a], vy = P[d + 1] - P[a + 1], vz = P[d + 2] - P[a + 2];
+        var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        if (nz <= 0) continue;
+        var nl = Math.hypot(nx, ny, nz) || 1;
+        list.push({ tr: tr, z: P[a + 2] + P[b + 2] + P[d + 2],
+                    dot: (nx * L[0] + ny * L[1] + nz * L[2]) / nl, nz: nz / nl });
+    }
+    list.sort(function (p, q) { return p.z - q.z; });
+    c.lineJoin = 'round';
+    c.lineWidth = 0.6;   // same-colour outline hides hairline seams between triangles
+    for (var k = 0; k < list.length; k++) {
+        var it = list[k], m = it.tr.m, r, g, bl;
+        if (m.glow) { r = m.r; g = m.g; bl = m.b; }
+        else {
+            var lit = 0.32 + 0.68 * Math.max(0, it.dot);
+            var spec = 0;
+            if (m.shiny) {   // chrome: highlight where the normal splits light and view
+                var hx = L[0], hy = L[1], hz = L[2] + 1, hl = Math.hypot(hx, hy, hz);
+                var tr2 = it.tr, A = tr2.a * 3, B = tr2.b * 3, D = tr2.c * 3;
+                var ux2 = P[B] - P[A], uy2 = P[B + 1] - P[A + 1], uz2 = P[B + 2] - P[A + 2];
+                var vx2 = P[D] - P[A], vy2 = P[D + 1] - P[A + 1], vz2 = P[D + 2] - P[A + 2];
+                var nx2 = uy2 * vz2 - uz2 * vy2, ny2 = uz2 * vx2 - ux2 * vz2, nz2 = ux2 * vy2 - uy2 * vx2;
+                var h = (nx2 * hx + ny2 * hy + nz2 * hz) / ((Math.hypot(nx2, ny2, nz2) || 1) * hl);
+                spec = Math.pow(Math.max(0, h), 24) * 110;
+            }
+            r = Math.min(255, m.r * lit + spec); g = Math.min(255, m.g * lit + spec); bl = Math.min(255, m.b * lit + spec);
+        }
+        var col = 'rgb(' + (r | 0) + ',' + (g | 0) + ',' + (bl | 0) + ')';
+        var ia = it.tr.a * 3, ib = it.tr.b * 3, ic = it.tr.c * 3;
+        c.beginPath();
+        c.moveTo(ox + P[ia] * scale, oy - P[ia + 1] * scale);
+        c.lineTo(ox + P[ib] * scale, oy - P[ib + 1] * scale);
+        c.lineTo(ox + P[ic] * scale, oy - P[ic + 1] * scale);
+        c.closePath();
+        c.fillStyle = col; c.strokeStyle = col;
+        c.fill(); c.stroke();
+    }
+    return { canvas: cv, ox: ox, oy: oy };
+}
+
+function _drawWeaponModel(ctx, def, centerX, centerY, rotX, rotY, rotZ, scale) {
+    var key = rotX.toFixed(4) + ',' + rotY.toFixed(4) + ',' + rotZ.toFixed(4) + ',' + scale.toFixed(2);
+    if (!def.cache || def.cache.key !== key) {
+        var r = _renderWeaponModel(def, Math.cos(rotX), Math.sin(rotX), Math.cos(rotY), Math.sin(rotY),
+                                   Math.cos(rotZ), Math.sin(rotZ), scale);
+        r.key = key;
+        def.cache = r;
+    }
+    ctx.drawImage(def.cache.canvas, Math.round(centerX - def.cache.ox), Math.round(centerY - def.cache.oy));
+}
+
+// Reticle dot — only shown in ADS mode (hip-fire has no reticle)
+function _drawAdsReticle(ctx) {
+    if (gunModel.pivotMode !== 'barrel') return;
+    var barrelScreen = getBarrelScreenPos();
+    ctx.beginPath();
+    ctx.arc(barrelScreen.x, barrelScreen.y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'cyan';
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+}
+
 // Render gun viewmodel (first-person weapon overlay)
 // Visual position, rotation, and scale come from gunViewModel (independent from gun mechanics).
 // Geometry (vertices, faces, uvs, texture) still read from gunModel.
@@ -123,6 +316,13 @@ function RenderGunViewmodel(ctx) {
 
     var depthScale = 1 - gunViewModel.offsetZ / 200;
     var scale = gunViewModel.scale * depthScale * sizeScale;
+
+    var weaponModel = _activeWeaponModel();
+    if (weaponModel) {
+        _drawWeaponModel(ctx, weaponModel, centerX, centerY, rotX, rotY, rotZ, scale);
+        _drawAdsReticle(ctx);
+        return;
+    }
 
     var projected = gunModel.vertices.map(v => {
         var x = v.x, y = v.y, z = v.z;
@@ -205,17 +405,7 @@ function RenderGunViewmodel(ctx) {
         ctx.stroke();
     });
 
-    // Reticle dot — only shown in ADS mode (hip-fire has no reticle)
-    if (gunModel.pivotMode === 'barrel') {
-        var barrelScreen = getBarrelScreenPos();
-        ctx.beginPath();
-        ctx.arc(barrelScreen.x, barrelScreen.y, 4, 0, Math.PI * 2);
-        ctx.fillStyle = 'cyan';
-        ctx.fill();
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-    }
+    _drawAdsReticle(ctx);
 }
 
 // Render ground weapons (floating pickups)
