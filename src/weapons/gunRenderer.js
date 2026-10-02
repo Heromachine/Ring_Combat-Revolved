@@ -98,6 +98,31 @@ var WEAPON_MODELS = {
         // rear fin reaches the placeholder's top edge (0.15), which is what
         // lines the sights up with the crosshair in ADS.
         anchor: { x: -0.035, y: 0.053 }
+    },
+    // The long guns are 0.85-1.0 m against the pistol's 0.30 m. At scale 1.0
+    // their hip-fire footprint matches the placeholder's, which the hip pose
+    // was tuned for. Each anchor y puts the gun's highest point at the same
+    // 0.15 sight line as the pistol: y = 0.15 - (top - centroid y) * scale.
+    sniper: {   // ivory and gold long rifle; its top is the cowl hook
+        obj: '3D_models/raygun_rifle/raygun_rifle.obj',
+        mtl: '3D_models/raygun_rifle/raygun_rifle.mtl',
+        flip: true,
+        scale: 1.0,
+        anchor: { x: -0.035, y: 0.044 }
+    },
+    rifle: {    // full-auto rifle; its top is the carry handle
+        obj: '3D_models/raygun_automatic_rifle/raygun_automatic_rifle.obj',
+        mtl: '3D_models/raygun_automatic_rifle/raygun_automatic_rifle.mtl',
+        flip: true,
+        scale: 1.0,
+        anchor: { x: -0.035, y: 0.029 }
+    },
+    shotgun: {  // its top is the receiver fin
+        obj: '3D_models/raygun_shotgun/raygun_shotgun.obj',
+        mtl: '3D_models/raygun_shotgun/raygun_shotgun.mtl',
+        flip: true,
+        scale: 1.0,
+        anchor: { x: -0.035, y: 0.019 }
     }
 };
 
