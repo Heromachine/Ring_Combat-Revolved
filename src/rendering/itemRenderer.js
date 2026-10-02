@@ -156,8 +156,9 @@ function RenderItems(extraItems){
             scaleY *= 2.6;
             scaleX *= 2.6 * (sw / 2) / focal;
         }
-        if (it.type === "canopy") {
-            // Tree canopy billboard (terrainTrees.js): sized in world units.
+        if (it.type === "canopy" || it.type === "groundWeapon") {
+            // Tree canopy (terrainTrees.js) or ground weapon (gunRenderer.js)
+            // billboard: sized in world units.
             scaleX = it.w * (sw / 2) / groundForward;
             scaleY = it.h * focal / groundForward;
         }

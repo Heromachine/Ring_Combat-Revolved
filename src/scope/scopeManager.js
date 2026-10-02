@@ -39,7 +39,7 @@ function RenderSniperScope() {
                     });
             }
 
-            RenderItems(sprites);
+            RenderItems(sprites.concat(GroundWeaponSprites()));
         },
         RenderGroundWeapons: RenderGroundWeapons,
         RenderTestTarget: RenderTestTarget

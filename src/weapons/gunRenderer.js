@@ -433,43 +433,90 @@ function RenderGunViewmodel(ctx) {
     _drawAdsReticle(ctx);
 }
 
-// Render ground weapons (floating pickups)
-function RenderGroundWeapons() {
-    var ctx = screendata.context;
-    var sw = screendata.canvas.width;
-    var sinYaw = Math.sin(camera.angle);
-    var cosYaw = Math.cos(camera.angle);
-    var rx = cosYaw, ry = -sinYaw;
-    var focal = camera.focalLength;
+// ===============================
+// Ground weapons: the real gun, lying on the terrain
+// ===============================
+// Each pickup is drawn as a world sprite through RenderItems (depth-tested
+// against terrain, trees and everything else, like the tree canopies), not
+// painted over the finished frame. The sprite is the gun's own model -- the
+// WEAPON_MODELS entry for its type, or the placeholder Gun.obj that type
+// is held as -- rendered once from the side and cached per type. It sits on
+// the ground under it (looked up every frame, so it follows terrain that
+// streams in after the map loads) at the model's real size.
+var GROUND_GUN_PX = 256;          // sprite width in pixels
+var M_TO_WU = 3.28;               // 1 WU is about 1 ft
+var _groundSprites = {};          // type -> { img, w, h } or null while not ready
 
-    groundWeapons.forEach(function(gw) {
-        var dx = gw.x - camera.x;
-        var dy = gw.y - camera.y;
-        var groundForward = -dx * sinYaw - dy * cosYaw;
-
-        if (groundForward < 1 || groundForward > 200) return;
-
-        var right = dx * rx + dy * ry;
-        var screenX = right * (sw / 2) / groundForward + sw / 2;
-        var floatHeight = gw.z + 20 + Math.sin(Date.now() / 300) * 3;
-        var screenY = (camera.height - floatHeight) * focal / groundForward + camera.horizon;
-
-        var weaponDef = weapons[gw.type];
-        var size = 30 * focal / groundForward;
-        size = Math.max(10, Math.min(40, size));
-
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
-        ctx.fillStyle = weaponDef.bgColor;
-        ctx.fill();
-        ctx.strokeStyle = weaponDef.color;
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold ' + Math.floor(size * 0.6) + 'px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(weaponDef.letter, screenX, screenY + size * 0.2);
-        ctx.textAlign = 'left';
+function _placeholderAsModel() {
+    if (!gunModel.loaded || !gunModel.textureLoaded) return null;
+    var tw = gunModel.texture.width, th = gunModel.texture.height, data = gunModel.textureData.data;
+    var verts = new Float32Array(gunModel.vertices.length * 3), tris = [];
+    gunModel.vertices.forEach(function (v, i) { verts[i * 3] = v.x; verts[i * 3 + 1] = v.y; verts[i * 3 + 2] = v.z; });
+    gunModel.faces.forEach(function (f) {
+        var m = { r: 128, g: 128, b: 128, glow: false, shiny: false };
+        if (f.uvs && f.uvs.length >= 3) {   // same face colour the viewmodel uses: texture at the UV centre
+            var u = 0, w = 0;
+            for (var k = 0; k < 3; k++) { var t = gunModel.uvs[f.uvs[k]] || { u: 0.5, v: 0.5 }; u += t.u / 3; w += t.v / 3; }
+            u -= Math.floor(u); w = 1 - (w - Math.floor(w));
+            var idx = (Math.floor(w * (th - 1)) * tw + Math.floor(u * (tw - 1))) * 4;
+            m.r = data[idx]; m.g = data[idx + 1]; m.b = data[idx + 2];
+        }
+        tris.push({ a: f.verts[0], b: f.verts[1], c: f.verts[2], m: m });
     });
+    return { verts: verts, tris: tris, scale: 1 };
 }
+
+function _groundSprite(type) {
+    if (_groundSprites[type]) return _groundSprites[type];
+    var def = WEAPON_MODELS[type];
+    var model = def ? (def.loaded ? def : null) : _placeholderAsModel();
+    if (!model) return null;
+    var V = model.verts, minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (var i = 0; i < V.length; i += 3) {
+        if (V[i] < minX) minX = V[i]; if (V[i] > maxX) maxX = V[i];
+        if (V[i + 1] < minY) minY = V[i + 1]; if (V[i + 1] > maxY) maxY = V[i + 1];
+    }
+    // Side view (no rotation): length across, height up. A fresh object so
+    // the viewmodel's own cached canvas is left alone.
+    var px = GROUND_GUN_PX / (maxX - minX);
+    var r = _renderWeaponModel({ verts: V, tris: model.tris, cache: null }, 1, 0, 1, 0, 1, 0, px);
+    var cv = r.canvas;
+    cv.complete = true;   // RenderItems skips images that are not loaded
+    cv._rcPixels = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height);
+    var realScale = (def ? def.scale : 1);   // viewmodel scale back out: real metres
+    var sprite = { img: cv, w: (cv.width / px) / realScale * M_TO_WU, h: (cv.height / px) / realScale * M_TO_WU };
+    _groundSprites[type] = sprite;
+    return sprite;
+}
+
+// Ground weapons as RenderItems sprites. The sprite stands bottom-down on
+// the terrain; its height shrinks with the angle the player looks down at
+// it, so from above it reads as a gun lying on its side, not standing up.
+function GroundWeaponSprites() {
+    var out = [];
+    for (var i = 0; i < groundWeapons.length; i++) {
+        var gw = groundWeapons[i], sp = _groundSprite(gw.type);
+        if (!sp) continue;
+        gw.z = getRawTerrainHeight(gw.x, gw.y);   // terrain itself (getGroundHeight is eye height)
+        var dist = Math.hypot(gw.x - camera.x, gw.y - camera.y);
+        var down = Math.atan2(camera.height - gw.z, Math.max(1, dist));
+        var flat = Math.max(0.35, Math.min(1, Math.sin(Math.max(0, down)) + 0.2));
+        // depthBias: the gun lies along the ground, so the terrain texels
+        // around its own footprint must not cut its lower half off
+        // (canopies do the same with their trunk).
+        out.push(gw._sprite || (gw._sprite = { type: 'groundWeapon', image: sp.img, dx: 0, dy: 0, dz: 0,
+                                                depthBias: Math.max(1.5, sp.w / 2) }));
+        var it = gw._sprite;
+        it.x = gw.x; it.y = gw.y; it.z = gw.z;
+        // RenderItems sizes world sprites at (sw/2)/d pixels per unit across
+        // but focal/d up, so the height is scaled by (sw/2)/focal to keep
+        // the gun's own proportions on screen (as the enemy sprites do).
+        it.w = sp.w;
+        it.h = sp.h * flat * (screendata.canvas.width / 2) / camera.focalLength;
+    }
+    return out;
+}
+
+// The old floating circle-and-letter markers were drawn here, over the
+// finished frame. Ground weapons now go through GroundWeaponSprites().
+function RenderGroundWeapons() {}
